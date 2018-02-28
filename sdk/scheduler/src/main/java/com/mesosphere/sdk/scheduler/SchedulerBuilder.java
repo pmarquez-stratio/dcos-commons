@@ -66,7 +66,7 @@ public class SchedulerBuilder {
     private Collection<Object> customResources = new ArrayList<>();
     private RecoveryPlanOverriderFactory recoveryPlanOverriderFactory;
     private PlanCustomizer planCustomizer;
-    private Optional<String> customFrameworkName = Optional.empty();
+    private Optional<FrameworkConfig> multiServiceFrameworkConfig = Optional.empty();
 
     SchedulerBuilder(ServiceSpec serviceSpec, SchedulerConfig schedulerConfig) throws PersisterException {
         this(
@@ -162,15 +162,14 @@ public class SchedulerBuilder {
     }
 
     /**
-     * Assigns a framework name for this service to be used for config template retrieval. By default the service name
-     * is used. This is only relevant when a single framework is running multiple services.
+     * Assigns a custom framework configuration for this service. This is only relevant when a single framework is
+     * running multiple services. By default the framework configuration is derived from the {@link ServiceSpec}.
      *
-     * <p>WARNING: This call is not part of the stable API. Don't expect it to stick around.
-     *
-     * @param frameworkName the framework name to use for config template retrieval, otherwise the service name is used
+     * @param multiServiceFrameworkConfig a custom framework config to use, otherwise one will derived from the
+     *                                    {@link ServiceSpec} provided in the constructor
      */
-    public SchedulerBuilder setFrameworkName(String frameworkName) {
-        this.customFrameworkName = Optional.of(frameworkName);
+    public SchedulerBuilder setMultiServiceFrameworkConfig(FrameworkConfig multiServiceFrameworkConfig) {
+        this.multiServiceFrameworkConfig = Optional.of(multiServiceFrameworkConfig);
         return this;
     }
 
@@ -187,17 +186,17 @@ public class SchedulerBuilder {
         // up in the Curator case, where we specifically want to invoke CuratorLocker before accessing the storage.
 
         // FIRST, check and/or initialize schema version before doing any other storage access:
-        int expectedVersion = customFrameworkName.isPresent()
+        int expectedVersion = multiServiceFrameworkConfig.isPresent()
                 ? SUPPORTED_SCHEMA_VERSION_WITH_NAMESPACE
                 : SUPPORTED_SCHEMA_VERSION_WITHOUT_NAMESPACE;
         new SchemaVersionStore(persister).check(expectedVersion);
 
         // THEN, initialize storage access:
         FrameworkStore frameworkStore = new FrameworkStore(persister);
-        // When queue is enabled, store state/configs within a namespace matching the job name. Otherwise use an empty
-        // namespace (the default).
-        // TODO: sanitize slashes in job/service name?
-        String storageNamespace = customFrameworkName.isPresent() ? serviceSpec.getName() : "";
+        // When multi-service is enabled, store state/configs within a namespace matching the service name.
+        // Otherwise use an empty namespace (the default).
+        String storageNamespace = multiServiceFrameworkConfig.isPresent()
+                ? SchedulerUtils.withEscapedSlashes(serviceSpec.getName()) : "";
         StateStore stateStore = new StateStore(persister, storageNamespace);
         ConfigStore<ServiceSpec> configStore = new ConfigStore<>(
                 DefaultServiceSpec.getConfigurationFactory(serviceSpec), persister, storageNamespace);
@@ -246,7 +245,7 @@ public class SchedulerBuilder {
                 // Check for completion against the PRIOR service spec. For example, if the new service spec has n+1
                 // nodes, then we want to check that the prior n nodes had successfully deployed.
                 ServiceSpec lastServiceSpec = configStore.fetch(configStore.getTargetConfig());
-                Optional<Plan> deployPlan = SchedulerUtils.getDeployPlan(
+                Optional<Plan> deployPlan = getDeployPlan(
                         getPlans(stateStore, configStore, lastServiceSpec, yamlPlans));
                 if (deployPlan.isPresent() && deployPlan.get().isComplete()) {
                     logger.info("Marking deployment as having been previously completed");
@@ -285,7 +284,7 @@ public class SchedulerBuilder {
         // Now that a ServiceSpec has been chosen, generate the plans.
         Collection<Plan> plans = getPlans(stateStore, configStore, serviceSpec, yamlPlans);
         plans = selectDeployPlan(plans, hasCompletedDeployment);
-        Optional<Plan> deployPlan = SchedulerUtils.getDeployPlan(plans);
+        Optional<Plan> deployPlan = getDeployPlan(plans);
         if (!deployPlan.isPresent()) {
             throw new IllegalArgumentException("No deploy plan provided: " + plans);
         }
@@ -299,7 +298,7 @@ public class SchedulerBuilder {
         }
 
         PlanManager deploymentPlanManager =
-                DefaultPlanManager.createProceeding(SchedulerUtils.getDeployPlan(plans).get());
+                DefaultPlanManager.createProceeding(getDeployPlan(plans).get());
         PlanManager recoveryPlanManager = getRecoveryPlanManager(
                 Optional.ofNullable(recoveryPlanOverriderFactory),
                 stateStore,
@@ -315,7 +314,7 @@ public class SchedulerBuilder {
 
         return new DefaultScheduler(
                 serviceSpec,
-                customFrameworkName,
+                multiServiceFrameworkConfig,
                 schedulerConfig,
                 customResources,
                 planCoordinator,
@@ -361,7 +360,7 @@ public class SchedulerBuilder {
                 overrideRecoveryPlanManagers);
     }
 
-    public Optional<PlanManager> getDecommissionPlanManager(StateStore stateStore) {
+    private Optional<PlanManager> getDecommissionPlanManager(StateStore stateStore) {
         DecommissionPlanFactory decommissionPlanFactory = new DecommissionPlanFactory(serviceSpec, stateStore);
         Optional<Plan> decommissionPlan = decommissionPlanFactory.getPlan();
         if (decommissionPlan.isPresent()) {
@@ -464,6 +463,18 @@ public class SchedulerBuilder {
                 plans.size() == 1 ? "" : "s",
                 plans.stream().map(plan -> plan.getName()).collect(Collectors.toList()));
         return plans;
+    }
+
+    private static Optional<Plan> getDeployPlan(Collection<Plan> plans) {
+        List<Plan> deployPlans = plans.stream().filter(Plan::isDeployPlan).collect(Collectors.toList());
+
+        if (deployPlans.size() == 1) {
+            return Optional.of(deployPlans.get(0));
+        } else if (deployPlans.size() == 0) {
+            return Optional.empty();
+        } else {
+            throw new IllegalStateException(String.format("Found multiple deploy plans: %s", deployPlans));
+        }
     }
 
     /**

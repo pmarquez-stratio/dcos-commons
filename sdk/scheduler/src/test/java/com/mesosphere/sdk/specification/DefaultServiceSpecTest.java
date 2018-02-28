@@ -8,7 +8,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.google.common.collect.Iterables;
 import com.mesosphere.sdk.config.SerializationUtils;
-import com.mesosphere.sdk.config.validate.PodSpecsCannotUseUnsupportedFeatures;
 import com.mesosphere.sdk.dcos.Capabilities;
 import com.mesosphere.sdk.dcos.DcosConstants;
 import com.mesosphere.sdk.offer.evaluate.EvaluationOutcome;
@@ -100,34 +99,17 @@ public class DefaultServiceSpecTest {
 
     @Test
     public void validSimple() throws Exception {
-        ClassLoader classLoader = getClass().getClassLoader();
-        File file = new File(classLoader.getResource("valid-simple.yml").getFile());
-        DefaultServiceSpec serviceSpec = DefaultServiceSpec.newGenerator(file, SCHEDULER_CONFIG).build();
-        Assert.assertNotNull(serviceSpec);
-        Assert.assertTrue(PodSpecsCannotUseUnsupportedFeatures.serviceRequestsGpuResources(serviceSpec) ==
-                DcosConstants.DEFAULT_GPU_POLICY);
         validateServiceSpec("valid-simple.yml", DcosConstants.DEFAULT_GPU_POLICY);
     }
 
     @Test
     public void validGpuResource() throws Exception {
-        ClassLoader classLoader = getClass().getClassLoader();
-        File file = new File(classLoader.getResource("valid-gpu-resource.yml").getFile());
-        DefaultServiceSpec serviceSpec = DefaultServiceSpec.newGenerator(file, SCHEDULER_CONFIG).build();
-        Assert.assertNotNull(serviceSpec);
-        Assert.assertTrue("Expected serviceSpec to request support GPUs",
-                PodSpecsCannotUseUnsupportedFeatures.serviceRequestsGpuResources(serviceSpec));
         validateServiceSpec("valid-gpu-resource.yml", true);
     }
 
     @Test
     public void validGpuResourceSet() throws Exception {
-        ClassLoader classLoader = getClass().getClassLoader();
-        File file = new File(classLoader.getResource("valid-gpu-resourceset.yml").getFile());
-        DefaultServiceSpec serviceSpec = DefaultServiceSpec.newGenerator(file, SCHEDULER_CONFIG).build();
-        Assert.assertNotNull(serviceSpec);
-        Assert.assertTrue("Expected serviceSpec to request support GPUs",
-                PodSpecsCannotUseUnsupportedFeatures.serviceRequestsGpuResources(serviceSpec));
+        validateServiceSpec("valid-gpu-resourceset.yml", true);
     }
 
     @Test

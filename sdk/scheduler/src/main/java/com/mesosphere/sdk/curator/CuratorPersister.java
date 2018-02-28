@@ -45,7 +45,7 @@ public class CuratorPersister implements Persister {
      */
     public static class Builder {
         private final String serviceName;
-        private final String connectionString;
+        private final String zookeeperHostPort;
         private RetryPolicy retryPolicy;
         private String username;
         private String password;
@@ -53,10 +53,10 @@ public class CuratorPersister implements Persister {
         /**
          * Creates a new {@link Builder} instance which has been initialized with reasonable default values.
          */
-        private Builder(String serviceName, String zookeeperConnection) {
+        private Builder(String serviceName, String zookeeperHostPort) {
             this.serviceName = serviceName;
+            this.zookeeperHostPort = zookeeperHostPort;
             // Set defaults for customizable options:
-            this.connectionString = zookeeperConnection;
             this.retryPolicy = CuratorUtils.getDefaultRetry();
             this.username = "";
             this.password = "";
@@ -90,7 +90,7 @@ public class CuratorPersister implements Persister {
          */
         public CuratorPersister build() {
             CuratorFrameworkFactory.Builder builder = CuratorFrameworkFactory.builder()
-                    .connectString(connectionString)
+                    .connectString(zookeeperHostPort)
                     .retryPolicy(retryPolicy);
             final CuratorFramework client;
 
@@ -138,8 +138,8 @@ public class CuratorPersister implements Persister {
     /**
      * Creates a new {@link Builder} instance which has been initialized with reasonable default values.
      */
-    public static Builder newBuilder(String serviceName, String zookeeperConnection) {
-        return new Builder(serviceName, zookeeperConnection);
+    public static Builder newBuilder(String serviceName, String zookeeperHostPort) {
+        return new Builder(serviceName, zookeeperHostPort);
     }
 
     @VisibleForTesting

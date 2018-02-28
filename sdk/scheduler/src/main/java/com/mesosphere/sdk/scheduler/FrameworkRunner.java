@@ -20,6 +20,7 @@ public class FrameworkRunner {
 
     private final SchedulerConfig schedulerConfig;
     private final FrameworkConfig frameworkConfig;
+    private final boolean usingGpus;
 
     /**
      * Creates a new instance and does some internal initialization.
@@ -27,9 +28,10 @@ public class FrameworkRunner {
      * @param schedulerConfig scheduler config object to use for the process
      * @param frameworkConfig settings to use for registering the framework
      */
-    public FrameworkRunner(SchedulerConfig schedulerConfig, FrameworkConfig frameworkConfig) {
+    public FrameworkRunner(SchedulerConfig schedulerConfig, FrameworkConfig frameworkConfig, boolean usingGpus) {
         this.schedulerConfig = schedulerConfig;
         this.frameworkConfig = frameworkConfig;
+        this.usingGpus = usingGpus;
     }
 
     // NOTE: in multi-service case, use a single MultiMesosEventClient.
@@ -47,7 +49,7 @@ public class FrameworkRunner {
 
         Protos.FrameworkInfo frameworkInfo = getFrameworkInfo(frameworkScheduler.fetchFrameworkId());
         LOGGER.info("Registering framework: {}", TextFormat.shortDebugString(frameworkInfo));
-        String zkUri = String.format("zk://%s/mesos", frameworkConfig.zookeeperConnection);
+        String zkUri = String.format("zk://%s/mesos", frameworkConfig.getZookeeperHostPort());
         Protos.Status status = new SchedulerDriverFactory()
                 .create(frameworkScheduler, frameworkInfo, zkUri, schedulerConfig)
                 .run();
@@ -62,31 +64,31 @@ public class FrameworkRunner {
     @VisibleForTesting
     Protos.FrameworkInfo getFrameworkInfo(Optional<Protos.FrameworkID> frameworkId) {
         Protos.FrameworkInfo.Builder fwkInfoBuilder = Protos.FrameworkInfo.newBuilder()
-                .setName(frameworkConfig.frameworkName)
-                .setPrincipal(frameworkConfig.principal)
-                .setUser(frameworkConfig.user)
+                .setName(frameworkConfig.getFrameworkName())
+                .setPrincipal(frameworkConfig.getPrincipal())
+                .setUser(frameworkConfig.getUser())
                 .setFailoverTimeout(TWO_WEEK_SEC)
                 .setCheckpoint(true);
 
         // The framework ID is not available when we're being started for the first time.
         frameworkId.ifPresent(fwkInfoBuilder::setId);
 
-        if (frameworkConfig.preReservedRoles.isEmpty()) {
-            setRole(fwkInfoBuilder, frameworkConfig.role);
+        if (frameworkConfig.getPreReservedRoles().isEmpty()) {
+            setRole(fwkInfoBuilder, frameworkConfig.getRole());
         } else {
             fwkInfoBuilder.addCapabilitiesBuilder()
                     .setType(Protos.FrameworkInfo.Capability.Type.MULTI_ROLE);
             fwkInfoBuilder
-                    .addRoles(frameworkConfig.role)
-                    .addAllRoles(frameworkConfig.preReservedRoles);
+                    .addRoles(frameworkConfig.getRole())
+                    .addAllRoles(frameworkConfig.getPreReservedRoles());
         }
 
-        if (!StringUtils.isEmpty(frameworkConfig.webUrl)) {
-            fwkInfoBuilder.setWebuiUrl(frameworkConfig.webUrl);
+        if (!StringUtils.isEmpty(frameworkConfig.getWebUrl())) {
+            fwkInfoBuilder.setWebuiUrl(frameworkConfig.getWebUrl());
         }
 
         Capabilities capabilities = Capabilities.getInstance();
-        if (capabilities.supportsGpuResource() && frameworkConfig.enableGpuResources) {
+        if (capabilities.supportsGpuResource() && usingGpus) {
             fwkInfoBuilder.addCapabilitiesBuilder()
                     .setType(Protos.FrameworkInfo.Capability.Type.GPU_RESOURCES);
         }

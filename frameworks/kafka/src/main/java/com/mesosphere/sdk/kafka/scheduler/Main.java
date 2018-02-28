@@ -16,10 +16,10 @@ import com.mesosphere.sdk.kafka.api.KafkaZKClient;
 import com.mesosphere.sdk.kafka.api.TopicResource;
 import com.mesosphere.sdk.kafka.cmd.CmdExecutor;
 import com.mesosphere.sdk.scheduler.DefaultScheduler;
+import com.mesosphere.sdk.scheduler.FrameworkConfig;
 import com.mesosphere.sdk.scheduler.SchedulerBuilder;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.scheduler.SchedulerRunner;
-import com.mesosphere.sdk.scheduler.SchedulerUtils;
 import com.mesosphere.sdk.specification.DefaultServiceSpec;
 import com.mesosphere.sdk.specification.yaml.RawServiceSpec;
 
@@ -48,7 +48,7 @@ public class Main {
         if (StringUtils.isEmpty(kafkaZookeeperUri)) {
             // "master.mesos:2181" + "/dcos-service-path__to__my__kafka":
             kafkaZookeeperUri =
-                    SchedulerUtils.getZkHost(rawServiceSpec, schedulerConfig)
+                    FrameworkConfig.fromRawServiceSpec(rawServiceSpec).getZookeeperHostPort()
                     + CuratorUtils.getServiceRootPath(rawServiceSpec.getName());
         }
         LOGGER.info("Running Kafka with zookeeper path: {}", kafkaZookeeperUri);

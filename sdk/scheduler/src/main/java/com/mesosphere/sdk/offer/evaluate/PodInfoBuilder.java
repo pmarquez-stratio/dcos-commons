@@ -11,6 +11,7 @@ import com.mesosphere.sdk.offer.taskdata.EnvConstants;
 import com.mesosphere.sdk.offer.taskdata.EnvUtils;
 import com.mesosphere.sdk.offer.taskdata.TaskLabelReader;
 import com.mesosphere.sdk.offer.taskdata.TaskLabelWriter;
+import com.mesosphere.sdk.scheduler.FrameworkConfig;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.scheduler.plan.PodInstanceRequirement;
 import com.mesosphere.sdk.scheduler.recovery.FailureUtils;
@@ -43,7 +44,7 @@ public class PodInfoBuilder {
     private final PodInstance podInstance;
     private final Map<String, TaskPortLookup> portsByTask;
     private final boolean useDefaultExecutor;
-    private final Optional<String> customFrameworkName;
+    private final Optional<FrameworkConfig> multiServiceFrameworkConfig;
 
     public PodInfoBuilder(
             PodInstanceRequirement podInstanceRequirement,
@@ -53,11 +54,11 @@ public class PodInfoBuilder {
             Collection<Protos.TaskInfo> currentPodTasks,
             Protos.FrameworkID frameworkID,
             boolean useDefaultExecutor,
-            Optional<String> customFrameworkName,
+            Optional<FrameworkConfig> multiServiceFrameworkConfig,
             Map<TaskSpec, GoalStateOverride> overrideMap) throws InvalidRequirementException {
         PodInstance podInstance = podInstanceRequirement.getPodInstance();
         this.useDefaultExecutor = useDefaultExecutor;
-        this.customFrameworkName = customFrameworkName;
+        this.multiServiceFrameworkConfig = multiServiceFrameworkConfig;
 
         // Generate new TaskInfos based on the task spec. To keep things consistent, we always generate new TaskInfos
         // from scratch, with the only carry-over being the prior task environment.
@@ -299,10 +300,10 @@ public class PodInfoBuilder {
             TaskSpec taskSpec) {
         for (ConfigFileSpec config : taskSpec.getConfigFiles()) {
             String url;
-            if (customFrameworkName.isPresent()) {
-                // Download from JobArtifactResource. "serviceName" is actually the name of the job.
+            if (multiServiceFrameworkConfig.isPresent()) {
+                // Multi-service configuration. Namespace the URL within <framework>/<service>/...
                 url = ArtifactResource.getJobTemplateUrl(
-                        customFrameworkName.get(),
+                        multiServiceFrameworkConfig.get().getFrameworkName(),
                         serviceName,
                         targetConfigurationId,
                         podType,

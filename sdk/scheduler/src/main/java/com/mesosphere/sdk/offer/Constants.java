@@ -29,6 +29,8 @@ public class Constants {
     public static final String CPUS_RESOURCE_TYPE = "cpus";
     /** The name used for memory resources. */
     public static final String MEMORY_RESOURCE_TYPE = "mem";
+    /** The name used for GPU resources. */
+    public static final String GPUS_RESOURCE_TYPE = "gpus";
 
 
     /**

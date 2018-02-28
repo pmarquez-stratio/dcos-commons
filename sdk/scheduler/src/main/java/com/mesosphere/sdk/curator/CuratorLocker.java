@@ -33,7 +33,7 @@ public class CuratorLocker {
     });
 
     private final String serviceName;
-    private final String zookeeperConnection;
+    private final String zookeeperHostPort;
 
     private CuratorFramework curatorClient;
     private InterProcessSemaphoreMutex curatorMutex;
@@ -42,14 +42,14 @@ public class CuratorLocker {
      * Locks curator. This should only be called once per process. Throws if called a second time.
      *
      * @param serviceName the name of the service to be locked
-     * @param zookeeperConnection the connection string for the ZK instance, e.g. {@code master.mesos:2181}
+     * @param zookeeperHostPort the connection string for the ZK instance, e.g. {@code master.mesos:2181}
      */
-    public static void lock(String serviceName, String zookeeperConnection) {
+    public static void lock(String serviceName, String zookeeperHostPort) {
         synchronized (INSTANCE_LOCK) {
             if (instance != null) {
                 throw new IllegalStateException("Already locked");
             }
-            instance = new CuratorLocker(serviceName, zookeeperConnection);
+            instance = new CuratorLocker(serviceName, zookeeperHostPort);
             instance.lockInternal();
 
             Runtime.getRuntime().addShutdownHook(SHUTDOWN_HOOK);
@@ -71,12 +71,12 @@ public class CuratorLocker {
 
     /**
      * @param serviceName the name of the service to be locked
-     * @param zookeeperConnection the connection string for the ZK instance, e.g. {@code master.mesos:2181}
+     * @param zookeeperHostPort the connection string for the ZK instance, e.g. {@code master.mesos:2181}
      */
     @VisibleForTesting
-    CuratorLocker(String serviceName, String zookeeperConnection) {
+    CuratorLocker(String serviceName, String zookeeperHostPort) {
         this.serviceName = serviceName;
-        this.zookeeperConnection = zookeeperConnection;
+        this.zookeeperHostPort = zookeeperHostPort;
     }
 
     /**
@@ -88,7 +88,7 @@ public class CuratorLocker {
         if (curatorClient != null) {
             throw new IllegalStateException("Already locked");
         }
-        curatorClient = CuratorFrameworkFactory.newClient(zookeeperConnection, CuratorUtils.getDefaultRetry());
+        curatorClient = CuratorFrameworkFactory.newClient(zookeeperHostPort, CuratorUtils.getDefaultRetry());
         curatorClient.start();
 
         final String lockPath = PersisterUtils.join(CuratorUtils.getServiceRootPath(serviceName), LOCK_PATH_NAME);

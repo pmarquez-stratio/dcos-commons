@@ -13,6 +13,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import com.mesosphere.sdk.dcos.Capabilities;
+import com.mesosphere.sdk.dcos.DcosConstants;
 import com.mesosphere.sdk.testutils.TestConstants;
 
 import static org.mockito.Mockito.*;
@@ -29,13 +30,15 @@ public class FrameworkRunnerTest {
 
     @Test
     public void minimalFrameworkInfoInitial() {
-        Map<String, String> env = getMinimalMap();
-        SchedulerConfig schedulerConfig = SchedulerConfig.fromMap(env);
-        FrameworkConfig frameworkConfig = FrameworkConfig.fromMap(env);
-        FrameworkRunner runner = new FrameworkRunner(schedulerConfig, frameworkConfig);
+        EnvStore envStore = EnvStore.fromMap(getMinimalMap());
+        SchedulerConfig schedulerConfig = SchedulerConfig.fromEnvStore(envStore);
+        FrameworkConfig frameworkConfig = FrameworkConfig.fromEnvStore(envStore);
+
+        FrameworkRunner runner = new FrameworkRunner(schedulerConfig, frameworkConfig, false);
+
         Protos.FrameworkInfo info = runner.getFrameworkInfo(Optional.empty());
         Assert.assertEquals("/path/to/test-service", info.getName());
-        Assert.assertEquals("nobody", info.getUser());
+        Assert.assertEquals(DcosConstants.DEFAULT_SERVICE_USER, info.getUser());
         Assert.assertEquals(1209600, info.getFailoverTimeout(), 0.1);
         Assert.assertTrue(info.getCheckpoint());
         Assert.assertEquals("/path/to/test-service-principal", info.getPrincipal());
@@ -48,13 +51,15 @@ public class FrameworkRunnerTest {
 
     @Test
     public void minimalFrameworkInfoRelaunch() {
-        Map<String, String> env = getMinimalMap();
-        SchedulerConfig schedulerConfig = SchedulerConfig.fromMap(env);
-        FrameworkConfig frameworkConfig = FrameworkConfig.fromMap(env);
-        FrameworkRunner runner = new FrameworkRunner(schedulerConfig, frameworkConfig);
+        EnvStore envStore = EnvStore.fromMap(getMinimalMap());
+        SchedulerConfig schedulerConfig = SchedulerConfig.fromEnvStore(envStore);
+        FrameworkConfig frameworkConfig = FrameworkConfig.fromEnvStore(envStore);
+
+        FrameworkRunner runner = new FrameworkRunner(schedulerConfig, frameworkConfig, false);
+
         Protos.FrameworkInfo info = runner.getFrameworkInfo(Optional.of(TestConstants.FRAMEWORK_ID));
         Assert.assertEquals("/path/to/test-service", info.getName());
-        Assert.assertEquals("nobody", info.getUser());
+        Assert.assertEquals(DcosConstants.DEFAULT_SERVICE_USER, info.getUser());
         Assert.assertEquals(1209600, info.getFailoverTimeout(), 0.1);
         Assert.assertTrue(info.getCheckpoint());
         Assert.assertEquals("/path/to/test-service-principal", info.getPrincipal());
@@ -72,16 +77,16 @@ public class FrameworkRunnerTest {
         env.put("FRAMEWORK_USER", "custom-user");
         env.put("FRAMEWORK_PRERESERVED_ROLES", "role1,role2,role3");
         env.put("FRAMEWORK_WEB_URL", "custom-url");
-        env.put("FRAMEWORK_GPUS", "True");
-        SchedulerConfig schedulerConfig = SchedulerConfig.fromMap(env);
-        FrameworkConfig frameworkConfig = FrameworkConfig.fromMap(env);
+        EnvStore envStore = EnvStore.fromMap(env);
+        SchedulerConfig schedulerConfig = SchedulerConfig.fromEnvStore(envStore);
+        FrameworkConfig frameworkConfig = FrameworkConfig.fromEnvStore(envStore);
 
         when(mockCapabilities.supportsGpuResource()).thenReturn(true);
         when(mockCapabilities.supportsPreReservedResources()).thenReturn(true);
         when(mockCapabilities.supportsRegionAwareness(schedulerConfig)).thenReturn(true);
         when(mockCapabilities.supportsGpuResource()).thenReturn(true);
 
-        FrameworkRunner runner = new FrameworkRunner(schedulerConfig, frameworkConfig);
+        FrameworkRunner runner = new FrameworkRunner(schedulerConfig, frameworkConfig, true);
         Protos.FrameworkInfo info = runner.getFrameworkInfo(Optional.of(TestConstants.FRAMEWORK_ID));
         Assert.assertEquals("/path/to/test-service", info.getName());
         Assert.assertEquals("custom-user", info.getUser());

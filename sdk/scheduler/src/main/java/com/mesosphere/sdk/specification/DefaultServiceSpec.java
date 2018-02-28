@@ -17,6 +17,7 @@ import com.mesosphere.sdk.config.SerializationUtils;
 import com.mesosphere.sdk.config.TaskEnvRouter;
 import com.mesosphere.sdk.dcos.DcosConstants;
 import com.mesosphere.sdk.offer.evaluate.placement.*;
+import com.mesosphere.sdk.scheduler.FrameworkConfig;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.specification.validation.UniquePodType;
 import com.mesosphere.sdk.specification.validation.ValidationUtils;
@@ -460,6 +461,7 @@ public class DefaultServiceSpec implements ServiceSpec {
         private final RawServiceSpec rawServiceSpec;
         private final SchedulerConfig schedulerConfig;
         private final TaskEnvRouter taskEnvRouter;
+        private Optional<FrameworkConfig> multiServiceFrameworkConfig;
         private YAMLToInternalMappers.ConfigTemplateReader configTemplateReader;
 
         private Generator(
@@ -470,6 +472,7 @@ public class DefaultServiceSpec implements ServiceSpec {
             this.rawServiceSpec = rawServiceSpec;
             this.schedulerConfig = schedulerConfig;
             this.taskEnvRouter = taskEnvRouter;
+            this.multiServiceFrameworkConfig = Optional.empty();
             this.configTemplateReader = new YAMLToInternalMappers.ConfigTemplateReader(configTemplateDir);
         }
 
@@ -494,6 +497,15 @@ public class DefaultServiceSpec implements ServiceSpec {
         }
 
         /**
+         * Assigns a custom framework config. In the default single-service case, this is derived from the
+         * {@link RawServiceSpec} provided in the constructor.
+         */
+        public Generator setMultiServiceFrameworkConfig(FrameworkConfig multiServiceFrameworkConfig) {
+            this.multiServiceFrameworkConfig = Optional.of(multiServiceFrameworkConfig);
+            return this;
+        }
+
+        /**
          * Assigns a custom {@link YAMLToInternalMappers.ConfigTemplateReader} implementation for reading config file
          * templates.  This is exposed to support mocking in tests.
          */
@@ -505,7 +517,12 @@ public class DefaultServiceSpec implements ServiceSpec {
 
         public DefaultServiceSpec build() throws Exception {
             return YAMLToInternalMappers.convertServiceSpec(
-                    rawServiceSpec, schedulerConfig, taskEnvRouter, configTemplateReader);
+                    rawServiceSpec,
+                    // Use provided multi-service config, or derive single-service config from the RawServiceSpec:
+                    multiServiceFrameworkConfig.orElse(FrameworkConfig.fromRawServiceSpec(rawServiceSpec)),
+                    schedulerConfig,
+                    taskEnvRouter,
+                    configTemplateReader);
         }
     }
 

@@ -9,37 +9,42 @@ import org.junit.Test;
 public class SchedulerConfigTest {
 
     @Test
-    public void testUninstallIsEnabled() throws Exception {
+    public void testUninstall() throws Exception {
         Map<String, String> confMap = getMinimalMap();
-        confMap.put("SDK_UNINSTALL", "true");
-        SchedulerConfig schedulerConfig = SchedulerConfig.fromMap(confMap);
-        Assert.assertTrue(schedulerConfig.isUninstallEnabled());
-        confMap.put("SDK_UNINSTALL", "can be set to anything");
-        schedulerConfig = SchedulerConfig.fromMap(confMap);
-        Assert.assertTrue(schedulerConfig.isUninstallEnabled());
-    }
 
-    @Test
-    public void testUninstallIsDisabled() throws Exception {
-        Map<String, String> confMap = getMinimalMap();
+        confMap.put("SDK_UNINSTALL", "true");
+        SchedulerConfig schedulerConfig = SchedulerConfig.fromEnvStore(EnvStore.fromMap(confMap));
+        Assert.assertTrue(schedulerConfig.isUninstallEnabled());
+
+        confMap.put("SDK_UNINSTALL", "can be set to anything");
+        schedulerConfig = SchedulerConfig.fromEnvStore(EnvStore.fromMap(confMap));
+        Assert.assertTrue(schedulerConfig.isUninstallEnabled());
+
+        confMap.put("SDK_UNINSTALL", "");
+        schedulerConfig = SchedulerConfig.fromEnvStore(EnvStore.fromMap(confMap));
+        Assert.assertTrue(schedulerConfig.isUninstallEnabled());
+
         confMap.remove("SDK_UNINSTALL");
-        SchedulerConfig schedulerConfig = SchedulerConfig.fromMap(confMap);
+        schedulerConfig = SchedulerConfig.fromEnvStore(EnvStore.fromMap(confMap));
         Assert.assertFalse(schedulerConfig.isUninstallEnabled());
     }
 
     @Test
-    public void regionAwareness() {
+    public void testRegionAwareness() {
         Map<String, String> confMap = getMinimalMap();
-        SchedulerConfig schedulerConfig = SchedulerConfig.fromMap(confMap);
+        SchedulerConfig schedulerConfig = SchedulerConfig.fromEnvStore(EnvStore.fromMap(confMap));
         Assert.assertFalse(schedulerConfig.isRegionAwarenessEnabled());
 
         confMap.put("ALLOW_REGION_AWARENESS", "false");
+        schedulerConfig = SchedulerConfig.fromEnvStore(EnvStore.fromMap(confMap));
         Assert.assertFalse(schedulerConfig.isRegionAwarenessEnabled());
 
         confMap.put("ALLOW_REGION_AWARENESS", "true");
+        schedulerConfig = SchedulerConfig.fromEnvStore(EnvStore.fromMap(confMap));
         Assert.assertTrue(schedulerConfig.isRegionAwarenessEnabled());
 
         confMap.remove("ALLOW_REGION_AWARENESS");
+        schedulerConfig = SchedulerConfig.fromEnvStore(EnvStore.fromMap(confMap));
         Assert.assertFalse(schedulerConfig.isRegionAwarenessEnabled());
     }
 

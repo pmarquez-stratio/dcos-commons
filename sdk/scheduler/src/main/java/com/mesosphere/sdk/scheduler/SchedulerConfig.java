@@ -27,7 +27,6 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.RSAPublicKeySpec;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -136,20 +135,20 @@ public class SchedulerConfig {
      * Returns a new {@link SchedulerConfig} instance which is based off the process environment.
      */
     public static SchedulerConfig fromEnv() {
-        return fromMap(System.getenv());
+        return fromEnvStore(EnvStore.fromEnv());
     }
 
     /**
      * Returns a new {@link SchedulerConfig} instance which is based off the provided custom environment map.
      */
-    public static SchedulerConfig fromMap(Map<String, String> map) {
-        return new SchedulerConfig(map);
+    public static SchedulerConfig fromEnvStore(EnvStore envStore) {
+        return new SchedulerConfig(envStore);
     }
 
     private final EnvStore envStore;
 
-    private SchedulerConfig(Map<String, String> flagMap) {
-        this.envStore = new EnvStore(flagMap);
+    private SchedulerConfig(EnvStore envStore) {
+        this.envStore = envStore;
 
         if (!PRINTED_BUILD_INFO.getAndSet(true)) {
             LOGGER.info("Build information:\n- {}: {}, built {}\n- SDK: {}/{}, built {}",

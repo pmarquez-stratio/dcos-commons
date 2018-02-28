@@ -65,7 +65,7 @@ public class DefaultScheduler extends ServiceScheduler {
      */
     protected DefaultScheduler(
             ServiceSpec serviceSpec,
-            Optional<String> customFrameworkName,
+            Optional<FrameworkConfig> multiServiceFrameworkConfig,
             SchedulerConfig schedulerConfig,
             Collection<Object> customResources,
             PlanCoordinator planCoordinator,
@@ -92,7 +92,7 @@ public class DefaultScheduler extends ServiceScheduler {
                         stateStore,
                         offerOutcomeTracker,
                         serviceSpec.getName(),
-                        customFrameworkName,
+                        multiServiceFrameworkConfig,
                         configStore.getTargetConfig(),
                         schedulerConfig,
                         Capabilities.getInstance().supportsDefaultExecutor()),

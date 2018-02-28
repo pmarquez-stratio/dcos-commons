@@ -6,6 +6,7 @@ import com.mesosphere.sdk.offer.*;
 import com.mesosphere.sdk.offer.history.OfferOutcome;
 import com.mesosphere.sdk.offer.history.OfferOutcomeTracker;
 import com.mesosphere.sdk.offer.taskdata.TaskLabelReader;
+import com.mesosphere.sdk.scheduler.FrameworkConfig;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.scheduler.plan.PodInstanceRequirement;
 import com.mesosphere.sdk.scheduler.recovery.FailureUtils;
@@ -33,7 +34,7 @@ public class OfferEvaluator {
     private final StateStore stateStore;
     private final OfferOutcomeTracker offerOutcomeTracker;
     private final String serviceName;
-    private final Optional<String> customFrameworkName;
+    private final Optional<FrameworkConfig> multiServiceFrameworkConfig;
     private final UUID targetConfigId;
     private final SchedulerConfig schedulerConfig;
     private final boolean useDefaultExecutor;
@@ -43,7 +44,7 @@ public class OfferEvaluator {
             StateStore stateStore,
             OfferOutcomeTracker offerOutcomeTracker,
             String serviceName,
-            Optional<String> customFrameworkName,
+            Optional<FrameworkConfig> multiServiceFrameworkConfig,
             UUID targetConfigId,
             SchedulerConfig schedulerConfig,
             boolean useDefaultExecutor) {
@@ -52,7 +53,7 @@ public class OfferEvaluator {
         this.stateStore = stateStore;
         this.offerOutcomeTracker = offerOutcomeTracker;
         this.serviceName = serviceName;
-        this.customFrameworkName = customFrameworkName;
+        this.multiServiceFrameworkConfig = multiServiceFrameworkConfig;
         this.targetConfigId = targetConfigId;
         this.schedulerConfig = schedulerConfig;
         this.useDefaultExecutor = useDefaultExecutor;
@@ -98,7 +99,7 @@ public class OfferEvaluator {
                     thisPodTasks.values(),
                     frameworkStore.fetchFrameworkId().get(),
                     useDefaultExecutor,
-                    customFrameworkName,
+                    multiServiceFrameworkConfig,
                     overrideMap);
             List<EvaluationOutcome> outcomes = new ArrayList<>();
             int failedOutcomeCount = 0;
