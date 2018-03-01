@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import com.google.protobuf.TextFormat;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * The Resource Cleaner provides recommended operations for cleaning up unexpected Reserved resources and persistent
@@ -15,13 +16,15 @@ import java.util.*;
 public class ResourceCleaner {
     private static final Logger LOGGER = LoggerFactory.getLogger(ResourceCleaner.class);
 
-    private final Collection<Protos.Resource> expectedResources;
+    private final Set<String> expectedResourceIds;
+    private final Set<String> expectedVolumeIds;
 
     /**
      * Creates a new instance which cleans up resources which aren't in the provided list.
      */
     public ResourceCleaner(Collection<Protos.Resource> expectedResources) {
-        this.expectedResources = expectedResources;
+        this.expectedResourceIds = getReservedResourceIds(expectedResources);
+        this.expectedVolumeIds = getPersistentVolumeIds(expectedResources);
     }
 
     /**
@@ -37,39 +40,23 @@ public class ResourceCleaner {
 
         // First, find any persistent volumes to be DESTROYed
         for (Protos.Offer offer : offers) {
-            for (Protos.Resource persistentVolume : getPersistentVolumesToBeDestroyed(offer)) {
+            for (Protos.Resource persistentVolume :
+                    selectUnexpectedResources(expectedVolumeIds, getPersistentVolumesById(offer))) {
+                LOGGER.info("Volume to be destroyed: {}", TextFormat.shortDebugString(persistentVolume));
                 recommendations.add(new DestroyOfferRecommendation(offer, persistentVolume));
             }
         }
 
         // Then, find any unexpected persistent volumes AND resource reservations which should (both) be UNRESERVEd
         for (Protos.Offer offer : offers) {
-            for (Protos.Resource reservedResource : getReservedResourcesToBeUnreserved(offer)) {
+            for (Protos.Resource reservedResource :
+                    selectUnexpectedResources(expectedResourceIds, getReservedResourcesById(offer))) {
+                LOGGER.info("Resource to be unreserved: {}", TextFormat.shortDebugString(reservedResource));
                 recommendations.add(new UnreserveOfferRecommendation(offer, reservedResource));
             }
         }
 
         return recommendations;
-    }
-
-    /**
-     * Examines the {@link Offer} to determine which {@link Resource}s should be unreserved.
-     *
-     * @param offer The {@link Offer} containing the {@link Resource}s.
-     * @return A {@link Collection} of {@link Resource}s that should be unreserved.
-     */
-    private Collection<? extends Protos.Resource> getReservedResourcesToBeUnreserved(Protos.Offer offer) {
-        return selectUnexpectedResources(getReservedResourceIds(expectedResources), getReservedResourcesById(offer));
-    }
-
-    /**
-     * Examines the {@link Offer} to determine which volume {@link Resource}s should be destroyed.
-     *
-     * @param offer The {@link Offer} containing the persistent volume {@link Resource}s.
-     * @return A {@link Collection} of {@link Resource}s that should be destroyed.
-     */
-    private Collection<? extends Protos.Resource> getPersistentVolumesToBeDestroyed(Protos.Offer offer) {
-        return selectUnexpectedResources(getPersistentVolumeIds(expectedResources), getPersistentVolumesById(offer));
     }
 
     /**
@@ -79,10 +66,8 @@ public class ResourceCleaner {
     private static Collection<Protos.Resource> selectUnexpectedResources(
             Set<String> expectedIds, Map<String, Protos.Resource> resourcesById) {
         List<Protos.Resource> unexpectedResources = new ArrayList<>();
-
         for (Map.Entry<String, Protos.Resource> entry : resourcesById.entrySet()) {
             if (!expectedIds.contains(entry.getKey())) {
-                LOGGER.info("Resource to be unreserved: {}", TextFormat.shortDebugString(entry.getValue()));
                 unexpectedResources.add(entry.getValue());
             }
         }
@@ -94,13 +79,10 @@ public class ResourceCleaner {
      * an empty list if no persistent volume resources were found.
      */
     private static Set<String> getPersistentVolumeIds(Collection<Protos.Resource> resources) {
-        Set<String> persistenceIds = new HashSet<>();
-        for (Protos.Resource resource : resources) {
-            if (resource.hasDisk() && resource.getDisk().hasPersistence()) {
-                persistenceIds.add(resource.getDisk().getPersistence().getId());
-            }
-        }
-        return persistenceIds;
+        return resources.stream()
+                .filter(r -> r.hasDisk() && r.getDisk().hasPersistence())
+                .map(r -> r.getDisk().getPersistence().getId())
+                .collect(Collectors.toSet());
     }
 
     /**

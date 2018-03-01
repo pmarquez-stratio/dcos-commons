@@ -184,7 +184,7 @@ public class OfferEvaluator {
             description = "existing";
             shouldGetNewRequirement = false;
         }
-        logger.info("Generating requirement for {} pod '{}' containing tasks: {}.",
+        logger.info("Generating requirement for {} pod '{}' containing tasks: {}",
                 description,
                 podInstanceRequirement.getPodInstance().getName(),
                 podInstanceRequirement.getTasksToLaunch());

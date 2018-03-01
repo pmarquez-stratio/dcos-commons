@@ -20,7 +20,7 @@ public class UninstallRecorderTest {
         Protos.Resource resource = ResourceTestUtils.getUnreservedCpus(1.0);
         OfferRecommendation unsupportedOfferRecommendation = new CreateOfferRecommendation(null, resource);
         StateStore mockStateStore = mock(StateStore.class);
-        OperationRecorder operationRecorder = new UninstallRecorder(mockStateStore, null);
+        OperationRecorder operationRecorder = new UninstallRecorder(mockStateStore, Collections.emptyList());
         // should just return without error
         operationRecorder.record(Collections.singletonList(unsupportedOfferRecommendation));
     }

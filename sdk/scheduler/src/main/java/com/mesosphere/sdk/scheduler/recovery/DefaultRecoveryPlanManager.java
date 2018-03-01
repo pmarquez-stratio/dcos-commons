@@ -284,7 +284,7 @@ public class DefaultRecoveryPlanManager implements PlanManager {
         failedPods = failedPods.stream()
                 .filter(pod -> !PlanUtils.assetConflicts(pod, dirtyAssets))
                 .collect(Collectors.toList());
-        logger.info("Found pods needing recovery: " + getPodNames(failedPods));
+        logger.info("Found pods needing recovery: {}", getPodNames(failedPods));
 
         List<PodInstanceRequirement> inProgressRecoveries = getPlan().getChildren().stream()
                 .flatMap(phase -> phase.getChildren().stream())
@@ -294,12 +294,12 @@ public class DefaultRecoveryPlanManager implements PlanManager {
                 .map(requirement -> requirement.get())
                 .filter(requirement -> !failureStateHasChanged(requirement))
                 .collect(Collectors.toList());
-        logger.info("Found recoveries already in progress: " + getPodNames(inProgressRecoveries));
+        logger.info("Found recoveries already in progress: {}", getPodNames(inProgressRecoveries));
 
         failedPods = failedPods.stream()
                 .filter(pod -> !PlanUtils.assetConflicts(pod, inProgressRecoveries))
                 .collect(Collectors.toList());
-        logger.info("New pods needing recovery: " + getPodNames(failedPods));
+        logger.info("New pods needing recovery: {}", getPodNames(failedPods));
 
         List<PodInstanceRequirement> recoveryRequirements = new ArrayList<>();
         for (PodInstanceRequirement failedPod : failedPods) {
@@ -365,7 +365,7 @@ public class DefaultRecoveryPlanManager implements PlanManager {
         return PlanUtils.getDirtyAssets(plan);
     }
 
-    private List<String> getTaskNames(Collection<Protos.TaskInfo> taskInfos) {
+    private static List<String> getTaskNames(Collection<Protos.TaskInfo> taskInfos) {
         return taskInfos.stream()
                 .map(taskInfo -> taskInfo.getName())
                 .collect(Collectors.toList());

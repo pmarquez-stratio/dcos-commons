@@ -3,6 +3,8 @@ package com.mesosphere.sdk.scheduler.uninstall;
 import com.mesosphere.sdk.dcos.clients.SecretsClient;
 import com.mesosphere.sdk.offer.CommonIdUtils;
 import com.mesosphere.sdk.offer.Constants;
+import com.mesosphere.sdk.offer.OfferRecommendation;
+import com.mesosphere.sdk.offer.UnreserveOfferRecommendation;
 import com.mesosphere.sdk.offer.taskdata.TaskLabelWriter;
 import com.mesosphere.sdk.scheduler.Driver;
 import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
@@ -167,12 +169,22 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
         UninstallScheduler uninstallScheduler = getUninstallScheduler();
         PlanCoordinator planCoordinator = uninstallScheduler.getPlanCoordinator();
         uninstallScheduler.offers(Collections.singletonList(offer));
+
+        // Verify that scheduler doesn't expect any resources, then tell it that resource_1/_2 have been cleaned:
+        Assert.assertTrue(uninstallScheduler.getExpectedResources().isEmpty());
+        uninstallScheduler.cleaned(toUninstallRecommendations(offer.getResourcesList()));
+
         Plan plan = planCoordinator.getPlanManagers().stream().findFirst().get().getPlan();
         List<Status> expected = Arrays.asList(Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.PENDING, Status.PENDING);
         Assert.assertEquals(plan.toString(), expected, getStepStatuses(plan));
 
         offer = OfferTestUtils.getOffer(Collections.singletonList(RESERVED_RESOURCE_3));
         uninstallScheduler.offers(Collections.singletonList(offer));
+
+        // Verify that scheduler doesn't expect any resources, then tell it that resource_3 has been cleaned:
+        Assert.assertTrue(uninstallScheduler.getExpectedResources().isEmpty());
+        uninstallScheduler.cleaned(toUninstallRecommendations(offer.getResourcesList()));
+
         expected = Arrays.asList(Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.PENDING);
         Assert.assertEquals(expected, getStepStatuses(plan));
     }
@@ -184,6 +196,11 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
         UninstallScheduler uninstallScheduler = getUninstallScheduler();
         PlanCoordinator planCoordinator = uninstallScheduler.getPlanCoordinator();
         uninstallScheduler.offers(Collections.singletonList(offer));
+
+        // Verify that scheduler doesn't expect any resources, then tell it that the offered resources have been cleaned:
+        Assert.assertTrue(uninstallScheduler.getExpectedResources().isEmpty());
+        uninstallScheduler.cleaned(toUninstallRecommendations(offer.getResourcesList()));
+
         Plan plan = planCoordinator.getPlanManagers().stream().findFirst().get().getPlan();
         List<Status> expected = Arrays.asList(Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.PENDING);
         Assert.assertEquals(plan.toString(), expected, getStepStatuses(plan));
@@ -234,10 +251,14 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
         when(mockSecretsClient.list(TestConstants.SERVICE_NAME)).thenReturn(Collections.emptyList());
 
         // Run through the task cleanup phase
-        uninstallScheduler.register(false); // TODO REMOVE??
         Protos.Offer offer = OfferTestUtils.getOffer(Arrays.asList(
                 RESERVED_RESOURCE_1, RESERVED_RESOURCE_2, RESERVED_RESOURCE_3));
         uninstallScheduler.offers(Collections.singletonList(offer));
+
+        // Verify that scheduler doesn't expect any resources, then tell it that the offered resources have been cleaned:
+        Assert.assertTrue(uninstallScheduler.getExpectedResources().isEmpty());
+        uninstallScheduler.cleaned(toUninstallRecommendations(offer.getResourcesList()));
+
         List<Status> expected = Arrays.asList(
                 Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.PENDING, Status.PENDING);
         Assert.assertEquals(plan.toString(), expected, getStepStatuses(plan));
@@ -339,5 +360,11 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
                 return uninstallPlan;
             }
         });
+    }
+
+    private static Collection<OfferRecommendation> toUninstallRecommendations(List<Protos.Resource> resources) {
+        return resources.stream()
+                .map(res -> new UnreserveOfferRecommendation(null, res))
+                .collect(Collectors.toList());
     }
 }

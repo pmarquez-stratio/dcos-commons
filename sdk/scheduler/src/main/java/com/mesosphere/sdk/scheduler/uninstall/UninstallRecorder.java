@@ -31,10 +31,7 @@ public class UninstallRecorder implements OperationRecorder {
             if (!(offerRecommendation instanceof UninstallRecommendation)) {
                 continue;
             }
-
-            // each offerRec ought to be tied to a resource with an ID
-            UninstallRecommendation uninstallRecommendation = (UninstallRecommendation) offerRecommendation;
-            Protos.Resource resource = uninstallRecommendation.getResource();
+            Protos.Resource resource = ((UninstallRecommendation) offerRecommendation).getResource();
 
             // Find the task(s) referencing the resource in this UninstallRecommendation
             List<Protos.TaskInfo> tasksToUpdate = stateStore.fetchTasks().stream()

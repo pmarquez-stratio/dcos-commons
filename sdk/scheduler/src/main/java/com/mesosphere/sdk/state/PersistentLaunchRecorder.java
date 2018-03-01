@@ -29,7 +29,7 @@ public class PersistentLaunchRecorder implements OperationRecorder {
     public void record(Collection<OfferRecommendation> offerRecommendations) throws Exception {
         for (OfferRecommendation offerRecommendation : offerRecommendations) {
             if (!(offerRecommendation instanceof LaunchOfferRecommendation)) {
-                return;
+                continue;
             }
 
             LaunchOfferRecommendation launchOfferRecommendation = (LaunchOfferRecommendation) offerRecommendation;
@@ -40,7 +40,7 @@ public class PersistentLaunchRecorder implements OperationRecorder {
             Optional<Protos.TaskStatus> taskStatus = Optional.empty();
             String taskStatusDescription = "";
             if (!taskInfo.getTaskId().getValue().equals("")) {
-                // Initialize the task status as TASK_STAGING. In practice we should never actually receive a TASK_STAGING
+                // Initialize the task status as TASK_STAGING. In practice we should never actually receive a STAGING
                 // status from Mesos so this is effectively an internal stub for the scheduler's own use.
                 taskStatusDescription = " with STAGING status";
 

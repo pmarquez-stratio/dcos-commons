@@ -29,9 +29,7 @@ public class PlanScheduler {
     }
 
     /**
-     * Processes the provided {@code Offer}s using the provided {@code SchedulerDriver} against the provided
-     * {@link Step}. {@link Step} should be whatever {@link Step} is currently the next pending {@link Step} in
-     * the current {@link Plan}, but may also be {@code null}.
+     * Processes the provided {@code Offer}s against the provided pending {@link Step}s.
      *
      * @return a list of zero or more of the provided offers which were accepted to fulfill offer
      *         requirements returned by the {@link Step}

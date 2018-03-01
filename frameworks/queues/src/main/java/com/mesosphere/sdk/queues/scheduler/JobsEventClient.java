@@ -161,8 +161,16 @@ public class JobsEventClient implements MesosEventClient {
 
     @Override
     public Collection<Resource> getExpectedResources() {
-        // TODO Auto-generated method stub
-        return null;
+        Collection<Resource> allExpectedResources = new ArrayList<>();
+        Collection<ServiceScheduler> jobs = jobInfoProvider.lockR();
+        try {
+            for (MesosEventClient job : jobs) {
+                allExpectedResources.addAll(job.getExpectedResources());
+            }
+        } finally {
+            jobInfoProvider.unlockR();
+        }
+        return allExpectedResources;
     }
 
     @Override

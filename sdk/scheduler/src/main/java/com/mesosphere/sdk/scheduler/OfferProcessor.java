@@ -181,44 +181,7 @@ class OfferProcessor {
             // Match offers with work (call into implementation)
             final Timer.Context context = Metrics.getProcessOffersDurationTimer();
             try {
-                OfferResponse response = mesosEventClient.offers(offers);
-
-                // Resource Cleaning:
-                // A ResourceCleaner ensures that reserved Resources are not leaked.  It is possible that an Agent may
-                // become inoperable for long enough that Tasks resident there were relocated.  However, this Agent may
-                // return at a later point and begin offering reserved Resources again.  To ensure that these unexpected
-                // reserved Resources are returned to the Mesos Cluster, the Resource Cleaner performs all necessary
-                // UNRESERVE and DESTROY (in the case of persistent volumes) Operations.
-                // Note: If there are unused reserved resources on a dirtied offer, then it will be cleaned in the next
-                // offer cycle.
-                // Note: We reconstruct the instance every cycle to trigger internal reevaluation of expected resources.
-
-                ResourceCleaner resourceCleaner = new ResourceCleaner(mesosEventClient.getExpectedResources());
-                List<OfferRecommendation> cleanerRecommendations = resourceCleaner.evaluate(response.unusedOffers);
-                mesosEventClient.cleaned(cleanerRecommendations);
-
-                // Decline the offers that haven't been used for anything:
-                Collection<Protos.Offer> unusedOffers =
-                        OfferUtils.filterOutAcceptedOffers(response.unusedOffers, cleanerRecommendations);
-                if (!unusedOffers.isEmpty()) {
-                    switch (response.result) {
-                    case NOT_READY:
-                        // The client isn't ready yet. Decline these offers for a brief interval.
-                        declineShort(unusedOffers);
-                        break;
-                    case PROCESSED:
-                        // The client turned down these offers. Decline these offers for a long interval.
-                        declineLong(unusedOffers);
-                        break;
-                    }
-                }
-
-                // Accept the offers with the operations to be performed against them:
-                List<OfferRecommendation> allRecommendations = new ArrayList<>();
-                allRecommendations.addAll(response.recommendations);
-                allRecommendations.addAll(cleanerRecommendations);
-                Metrics.incrementRecommendations(allRecommendations);
-                offerAccepter.accept(allRecommendations);
+                evaluateOffers(offers);
             } finally {
                 context.stop();
             }
@@ -238,6 +201,56 @@ class OfferProcessor {
                         offersInProgress.stream().map(Protos.OfferID::getValue).collect(Collectors.toList()));
             }
         }
+    }
+
+    private void evaluateOffers(List<Protos.Offer> offers) {
+        // Offer evaluation:
+        // The client (which is composed of one or more services) looks at the provided offers and returns a
+        // list of operations to perform and offers which were not used. On our end, we then perform the
+        // operations and decline the unused offers.
+        OfferResponse response = mesosEventClient.offers(offers);
+
+        // Resource Cleaning:
+        // A ResourceCleaner ensures that reserved Resources are not leaked.  It is possible that an Agent may
+        // become inoperable for long enough that Tasks resident there were relocated.  However, this Agent may
+        // return at a later point and begin offering reserved Resources again.  To ensure that these unexpected
+        // reserved Resources are returned to the Mesos Cluster, the Resource Cleaner performs all necessary
+        // UNRESERVE and DESTROY (in the case of persistent volumes) Operations.
+        // Note: Unused reserved resources on a used offer will be cleaned in the next offer cycle.
+        ResourceCleaner resourceCleaner = new ResourceCleaner(mesosEventClient.getExpectedResources());
+        List<OfferRecommendation> cleanerRecommendations = resourceCleaner.evaluate(response.unusedOffers);
+        // Notify the client of the resources that we are about to clean. This is mainly for uninstall
+        // schedulers, which need to keep track of the remaining resources.
+        // TODO(nickbp): Service uninstall could be centralized: 'Ownership' of remaining resources could be
+        //               transferred upstream into a single common uninstall handler at the framework level,
+        //               which performs resource cleanup across all services in the framework. Additionally,
+        //               deregistration should only occur if the entire framework is being taken down, so this
+        //               common uninstaller would be able to do that once it has cleaned ALL resources across
+        //               ALL services.
+        mesosEventClient.cleaned(cleanerRecommendations);
+
+        // Decline the offers that haven't been used for offer evaluation nor offer cleaning.
+        Collection<Protos.Offer> unusedOffers =
+                OfferUtils.filterOutAcceptedOffers(response.unusedOffers, cleanerRecommendations);
+        if (!unusedOffers.isEmpty()) {
+            switch (response.result) {
+            case NOT_READY:
+                // The client isn't ready yet. Decline these offers for a brief interval.
+                declineShort(unusedOffers);
+                break;
+            case PROCESSED:
+                // The client turned down these offers. Decline these offers for a long interval.
+                declineLong(unusedOffers);
+                break;
+            }
+        }
+
+        // Accept the offers with the operations to be performed against them:
+        List<OfferRecommendation> allRecommendations = new ArrayList<>();
+        allRecommendations.addAll(response.recommendations);
+        allRecommendations.addAll(cleanerRecommendations);
+        Metrics.incrementRecommendations(allRecommendations);
+        offerAccepter.accept(allRecommendations);
     }
 
     /**

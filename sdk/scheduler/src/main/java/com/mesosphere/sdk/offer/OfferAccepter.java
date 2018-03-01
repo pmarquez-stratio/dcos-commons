@@ -1,5 +1,6 @@
 package com.mesosphere.sdk.offer;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.TextFormat;
 import com.mesosphere.sdk.scheduler.Driver;
 import org.apache.commons.collections.CollectionUtils;
@@ -37,14 +38,14 @@ public class OfferAccepter {
         // Group recommendations by agent: Mesos requires that acceptOffers() only applies to a single agent at a time.
         // Note that ORDERING IS IMPORTANT:
         //    The resource lifecycle is RESERVE -> CREATE -> DESTROY -> UNRESERVE
-        //    Therefore we must preserve ordering within each set of operations.
+        //    Therefore we must preserve ordering within each per-agent set of operations.
         final Map<String, List<OfferRecommendation>> recsByAgent = groupByAgent(allRecommendations);
         for (Map.Entry<String, List<OfferRecommendation>> agentRecs : recsByAgent.entrySet()) {
             List<Protos.Offer.Operation> operations = agentRecs.getValue().stream()
                     .map(rec -> rec.getOperation())
                     .collect(Collectors.toList());
 
-            logger.info("Performing {} operations on agent {}:", operations.size(), agentRecs.getKey());
+            logger.info("Sending {} operations for agent {}:", operations.size(), agentRecs.getKey());
             for (Protos.Offer.Operation op : operations) {
                 logger.info("  {}", TextFormat.shortDebugString(op));
             }
@@ -59,12 +60,12 @@ public class OfferAccepter {
     }
 
     /**
-     * Groups recommendations by agent.
-     *
-     * Visibility is protected to enable testing.
+     * Groups recommendations by agent, while preserving their existing order.
      */
+    @VisibleForTesting
     protected static Map<String, List<OfferRecommendation>> groupByAgent(List<OfferRecommendation> recommendations) {
-        final Map<String, List<OfferRecommendation>> recommendationsByAgent = new HashMap<>();
+        // Use TreeMap for consistent ordering. Not required but simplifies testing, and nice to have consistent output.
+        final Map<String, List<OfferRecommendation>> recommendationsByAgent = new TreeMap<>();
         for (OfferRecommendation recommendation : recommendations) {
             final String agentId = recommendation.getOffer().getSlaveId().getValue();
             List<OfferRecommendation> agentRecommendations = recommendationsByAgent.get(agentId);

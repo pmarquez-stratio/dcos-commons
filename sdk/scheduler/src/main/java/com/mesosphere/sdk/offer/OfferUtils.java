@@ -14,10 +14,10 @@ public class OfferUtils {
     /**
      * Filters out accepted offers and returns back a list of unused offers.
      *
-     * @param offers           An {@link org.apache.mesos.Protos.Offer} collection containing both ACCEPTED and
-     *                         UNACCEPTED offers.
-     * @param acceptedOfferIds A collection of OfferIDs that are already ACCEPTED.
-     * @return A List of offers are that not ACCEPTED yet; can be empty if there are no UNACCEPTED offers left.
+     * @param offers          An {@link org.apache.mesos.Protos.Offer} collection containing both ACCEPTED and
+     *                        UNACCEPTED offers
+     * @param recommendations A collection of offer recommendations, which hold accepted offers
+     * @return Offers are that not ACCEPTED yet, or an empty list if there are no UNACCEPTED offers left
      */
     public static List<Protos.Offer> filterOutAcceptedOffers(
             List<Protos.Offer> offers, Collection<? extends OfferRecommendation> recommendations) {

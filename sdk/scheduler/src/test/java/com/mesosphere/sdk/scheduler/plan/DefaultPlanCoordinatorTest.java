@@ -1,5 +1,6 @@
 package com.mesosphere.sdk.scheduler.plan;
 
+import com.mesosphere.sdk.offer.OfferRecommendation;
 import com.mesosphere.sdk.offer.evaluate.OfferEvaluator;
 import com.mesosphere.sdk.offer.history.OfferOutcomeTracker;
 import com.mesosphere.sdk.specification.*;
@@ -158,9 +159,9 @@ public class DefaultPlanCoordinatorTest extends DefaultCapabilitiesTestSuite {
                 new DefaultPlanCoordinator(TestConstants.SERVICE_NAME, Arrays.asList(planManager));
         Assert.assertEquals(
                 Arrays.asList(TestConstants.OFFER_ID),
-                planScheduler.resourceOffers(
+                getDistinctOfferIds(planScheduler.resourceOffers(
                         getOffers(SUFFICIENT_CPUS, SUFFICIENT_MEM, SUFFICIENT_DISK),
-                        coordinator.getCandidates()));
+                        coordinator.getCandidates())));
     }
 
     @Test
@@ -259,9 +260,9 @@ public class DefaultPlanCoordinatorTest extends DefaultCapabilitiesTestSuite {
                 Arrays.asList(DefaultPlanManager.createProceeding(planA), DefaultPlanManager.createProceeding(planB)));
         Assert.assertEquals(
                 Arrays.asList(TestConstants.OFFER_ID, OTHER_ID),
-                planScheduler.resourceOffers(
+                getDistinctOfferIds(planScheduler.resourceOffers(
                         getOffers(SUFFICIENT_CPUS, SUFFICIENT_MEM, SUFFICIENT_DISK),
-                        coordinator.getCandidates()));
+                        coordinator.getCandidates())));
     }
 
     @Test
@@ -276,9 +277,9 @@ public class DefaultPlanCoordinatorTest extends DefaultCapabilitiesTestSuite {
                 Arrays.asList(DefaultPlanManager.createProceeding(planA), DefaultPlanManager.createProceeding(planB)));
         Assert.assertEquals(
                 Arrays.asList(TestConstants.OFFER_ID),
-                planScheduler.resourceOffers(
+                getDistinctOfferIds(planScheduler.resourceOffers(
                         getOffers(SUFFICIENT_CPUS, SUFFICIENT_MEM, SUFFICIENT_DISK),
-                        coordinator.getCandidates()));
+                        coordinator.getCandidates())));
     }
 
     @Test
@@ -318,11 +319,19 @@ public class DefaultPlanCoordinatorTest extends DefaultCapabilitiesTestSuite {
         // dirty assets.
         Assert.assertEquals(
                 Arrays.asList(TestConstants.OFFER_ID),
-                planScheduler.resourceOffers(
+                getDistinctOfferIds(planScheduler.resourceOffers(
                         getOffers(SUFFICIENT_CPUS, SUFFICIENT_MEM, SUFFICIENT_DISK),
-                        coordinator.getCandidates()));
+                        coordinator.getCandidates())));
 
         Assert.assertTrue(planB.getChildren().get(0).getChildren().get(0).getStatus().equals(Status.STARTING));
         Assert.assertTrue(planA.getChildren().get(0).getChildren().get(0).getStatus().equals(Status.PENDING));
+    }
+
+    private static Collection<Protos.OfferID> getDistinctOfferIds(Collection<OfferRecommendation> recs) {
+        // Each offer produces several OfferRecommendations, one per resource to reserve. Trim that down.
+        return recs.stream()
+                .map(rec -> rec.getOffer().getId())
+                .distinct()
+                .collect(Collectors.toList());
     }
 }
