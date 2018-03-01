@@ -6,9 +6,7 @@ import com.mesosphere.sdk.state.ConfigStore;
 import com.mesosphere.sdk.state.ConfigStoreException;
 import com.mesosphere.sdk.storage.Persister;
 import org.apache.commons.codec.digest.DigestUtils;
-import org.apache.commons.lang3.builder.HashCodeBuilder;
 
-import java.util.Optional;
 import java.util.UUID;
 
 /**

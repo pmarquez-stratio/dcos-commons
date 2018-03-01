@@ -6,11 +6,9 @@ import com.mesosphere.sdk.state.ConfigStoreException;
 import com.mesosphere.sdk.storage.MemPersister;
 import com.mesosphere.sdk.storage.Persister;
 import com.mesosphere.sdk.testutils.TestConstants;
-import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.mesos.Protos;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Arrays;
