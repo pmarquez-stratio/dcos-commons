@@ -1,5 +1,7 @@
 package com.mesosphere.sdk.offer;
 
+import java.util.Collection;
+
 /**
  * The OperationRecorder is an Interface required by the OfferAccepter.
  * This interface is intended to allow Framework authors an opportunity to record
@@ -7,5 +9,5 @@ package com.mesosphere.sdk.offer;
  * storage location.
  */
 public interface OperationRecorder {
-    void record(OfferRecommendation offerRecommendation) throws Exception;
+    void record(Collection<OfferRecommendation> offerRecommendations) throws Exception;
 }

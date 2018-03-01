@@ -69,7 +69,7 @@ public class OfferProcessorTest {
             @Override
             public OfferResponse answer(InvocationOnMock invocation) throws Throwable {
                 // Pass back all the offers we got as unused:
-                return OfferResponse.processed(getOffersArgument(invocation));
+                return OfferResponse.processed(Collections.emptyList(), getOffersArgument(invocation));
             }
         });
 
@@ -99,7 +99,8 @@ public class OfferProcessorTest {
 
     @Test
     public void testAsyncOffersLimitedQueueSize() throws InterruptedException {
-        when(mockMesosEventClient.offers(any())).thenReturn(OfferResponse.processed(Collections.emptyList()));
+        when(mockMesosEventClient.offers(any())).thenReturn(
+                OfferResponse.processed(Collections.emptyList(), Collections.emptyList()));
         processor.setOfferQueueSize(10).start();
 
         // At least some offers should have been dropped/declined before reaching the client:
@@ -119,7 +120,7 @@ public class OfferProcessorTest {
             public OfferResponse answer(InvocationOnMock invocation) throws Throwable {
                 List<Protos.Offer> offers = getOffersArgument(invocation);
                 receivedCount.addAndGet(offers.size());
-                return OfferResponse.processed(Collections.emptyList());
+                return OfferResponse.processed(Collections.emptyList(), Collections.emptyList());
             }
         });
 

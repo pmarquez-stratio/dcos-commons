@@ -32,7 +32,7 @@ public class JobsEventClientTest {
             if (!offers.isEmpty()) {
                 offers.remove(0);
             }
-            return OfferResponse.processed(offers);
+            return OfferResponse.processed(Collections.emptyList(), offers);
         }
     };
 
@@ -44,7 +44,7 @@ public class JobsEventClientTest {
             if (!offers.isEmpty()) {
                 offers.remove(offers.size() - 1);
             }
-            return OfferResponse.processed(offers);
+            return OfferResponse.processed(Collections.emptyList(), offers);
         }
     };
 

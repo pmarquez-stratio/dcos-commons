@@ -11,7 +11,10 @@ import org.junit.Test;
 
 import static org.mockito.Mockito.mock;
 
+import java.util.Collections;
+
 public class UninstallRecorderTest {
+
     @Test
     public void testHandlingOfUnexpectedOfferRecommendation() throws Exception {
         Protos.Resource resource = ResourceTestUtils.getUnreservedCpus(1.0);
@@ -19,7 +22,6 @@ public class UninstallRecorderTest {
         StateStore mockStateStore = mock(StateStore.class);
         OperationRecorder operationRecorder = new UninstallRecorder(mockStateStore, null);
         // should just return without error
-        operationRecorder.record(unsupportedOfferRecommendation);
+        operationRecorder.record(Collections.singletonList(unsupportedOfferRecommendation));
     }
-
 }

@@ -1,5 +1,6 @@
 package com.mesosphere.sdk.scheduler;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
@@ -19,9 +20,16 @@ import org.slf4j.LoggerFactory;
 import com.codahale.metrics.Timer;
 import com.google.common.annotations.VisibleForTesting;
 import com.mesosphere.sdk.offer.Constants;
+import com.mesosphere.sdk.offer.OfferAccepter;
+import com.mesosphere.sdk.offer.OfferRecommendation;
+import com.mesosphere.sdk.offer.OfferUtils;
+import com.mesosphere.sdk.offer.ResourceCleaner;
 import com.mesosphere.sdk.queue.OfferQueue;
 import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
 
+/**
+ * Handles offer processing for the framework.
+ */
 class OfferProcessor {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(OfferProcessor.class);
@@ -36,15 +44,18 @@ class OfferProcessor {
     private final Set<Protos.OfferID> offersInProgress = new HashSet<>();
 
     private final MesosEventClient mesosEventClient;
+    private final OfferAccepter offerAccepter;
 
     // May be overridden in tests:
-    private OfferQueue offerQueue = new OfferQueue();
-
+    private OfferQueue offerQueue;
     // Whether we should run in multithreaded mode. Should only be disabled for tests.
-    private boolean multithreaded = true;
+    private boolean multithreaded;
 
     public OfferProcessor(MesosEventClient mesosEventClient) {
         this.mesosEventClient = mesosEventClient;
+        this.offerAccepter = new OfferAccepter();
+        this.offerQueue = new OfferQueue();
+        this.multithreaded = true;
     }
 
     /**
@@ -171,18 +182,43 @@ class OfferProcessor {
             final Timer.Context context = Metrics.getProcessOffersDurationTimer();
             try {
                 OfferResponse response = mesosEventClient.offers(offers);
-                if (!response.unusedOffers.isEmpty()) {
+
+                // Resource Cleaning:
+                // A ResourceCleaner ensures that reserved Resources are not leaked.  It is possible that an Agent may
+                // become inoperable for long enough that Tasks resident there were relocated.  However, this Agent may
+                // return at a later point and begin offering reserved Resources again.  To ensure that these unexpected
+                // reserved Resources are returned to the Mesos Cluster, the Resource Cleaner performs all necessary
+                // UNRESERVE and DESTROY (in the case of persistent volumes) Operations.
+                // Note: If there are unused reserved resources on a dirtied offer, then it will be cleaned in the next
+                // offer cycle.
+                // Note: We reconstruct the instance every cycle to trigger internal reevaluation of expected resources.
+
+                ResourceCleaner resourceCleaner = new ResourceCleaner(mesosEventClient.getExpectedResources());
+                List<OfferRecommendation> cleanerRecommendations = resourceCleaner.evaluate(response.unusedOffers);
+                mesosEventClient.cleaned(cleanerRecommendations);
+
+                // Decline the offers that haven't been used for anything:
+                Collection<Protos.Offer> unusedOffers =
+                        OfferUtils.filterOutAcceptedOffers(response.unusedOffers, cleanerRecommendations);
+                if (!unusedOffers.isEmpty()) {
                     switch (response.result) {
                     case NOT_READY:
                         // The client isn't ready yet. Decline these offers for a brief interval.
-                        declineShort(offers);
+                        declineShort(unusedOffers);
                         break;
                     case PROCESSED:
                         // The client turned down these offers. Decline these offers for a long interval.
-                        declineLong(offers);
+                        declineLong(unusedOffers);
                         break;
                     }
                 }
+
+                // Accept the offers with the operations to be performed against them:
+                List<OfferRecommendation> allRecommendations = new ArrayList<>();
+                allRecommendations.addAll(response.recommendations);
+                allRecommendations.addAll(cleanerRecommendations);
+                Metrics.incrementRecommendations(allRecommendations);
+                offerAccepter.accept(allRecommendations);
             } finally {
                 context.stop();
             }

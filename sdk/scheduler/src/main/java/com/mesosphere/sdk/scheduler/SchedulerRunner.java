@@ -95,7 +95,10 @@ public class SchedulerRunner implements Runnable {
                 throw new IllegalStateException("Unable to clear all data", e);
             }
 
-            SchedulerApiServer.start(schedulerBuilder.getSchedulerConfig(), scheduler.getResources(), new Runnable() {
+            SchedulerApiServer.start(
+                    schedulerBuilder.getSchedulerConfig(),
+                    scheduler.getHTTPEndpoints(),
+                    new Runnable() {
                 @Override
                 public void run() {
                     LOGGER.info("Started trivially healthy API server.");

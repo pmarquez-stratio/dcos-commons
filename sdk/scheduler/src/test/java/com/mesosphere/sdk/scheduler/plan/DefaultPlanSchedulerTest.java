@@ -25,7 +25,7 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Tests for {@link DefaultPlanScheduler}.
+ * Tests for {@link PlanScheduler}.
  */
 public class DefaultPlanSchedulerTest {
 
@@ -39,14 +39,13 @@ public class DefaultPlanSchedulerTest {
             Arrays.asList(OfferID.newBuilder().setValue("offer").build());
     private static final SchedulerConfig SCHEDULER_CONFIG = SchedulerConfigTestUtils.getTestSchedulerConfig();
 
-    @Mock private OfferAccepter mockOfferAccepter;
     @Mock private OfferEvaluator mockOfferEvaluator;
     @Mock private SchedulerDriver mockSchedulerDriver;
     @Mock private StateStore mockStateStore;
     @Mock private OfferRecommendation mockRecommendation;
 
     private PodInstanceRequirement podInstanceRequirement;
-    private DefaultPlanScheduler scheduler;
+    private PlanScheduler scheduler;
     private List<OfferRecommendation> mockRecommendations;
 
     @Before
@@ -59,7 +58,7 @@ public class DefaultPlanSchedulerTest {
         File file = new File(classLoader.getResource("valid-minimal.yml").getFile());
         DefaultServiceSpec serviceSpec = DefaultServiceSpec.newGenerator(file, SCHEDULER_CONFIG).build();
 
-        scheduler = new DefaultPlanScheduler(serviceSpec.getName(), mockOfferAccepter, mockOfferEvaluator, mockStateStore);
+        scheduler = new PlanScheduler(serviceSpec.getName(), mockOfferEvaluator, mockStateStore);
 
         PodSpec podSpec = serviceSpec.getPods().get(0);
         PodInstance podInstance = new DefaultPodInstance(podSpec, 0);
@@ -73,7 +72,7 @@ public class DefaultPlanSchedulerTest {
         assertTrue(scheduler.resourceOffers(OFFERS, Arrays.asList(new TestStep())).isEmpty());
         assertTrue(scheduler.resourceOffers(null, Arrays.asList(new TestStep())).isEmpty());
         assertTrue(scheduler.resourceOffers(OFFERS, null).isEmpty());
-        verifyZeroInteractions(mockOfferAccepter, mockSchedulerDriver);
+        verifyZeroInteractions(mockSchedulerDriver);
     }
 
     @Test

@@ -35,10 +35,10 @@ public class UninstallScheduler extends ServiceScheduler {
 
     private final Logger logger;
     private final ConfigStore<ServiceSpec> configStore;
+    private final OperationRecorder recorder;
 
     private PlanManager uninstallPlanManager;
     private Collection<Object> resources = Collections.emptyList();
-    private OfferAccepter offerAccepter;
 
     /**
      * Creates a new {@link UninstallScheduler} based on the provided API port and initialization timeout, and a
@@ -84,6 +84,11 @@ public class UninstallScheduler extends ServiceScheduler {
                     customSecretsClientForTests)
                     .build();
         }
+        this.recorder = new UninstallRecorder(stateStore, deployPlan.getChildren().stream()
+                .flatMap(phase -> phase.getChildren().stream())
+                .filter(step -> step instanceof ResourceCleanupStep)
+                .map(step -> (ResourceCleanupStep) step)
+                .collect(Collectors.toList()));
 
         this.uninstallPlanManager = DefaultPlanManager.createProceeding(deployPlan);
         PlansResource plansResource = new PlansResource(Collections.singletonList(uninstallPlanManager));
@@ -91,16 +96,6 @@ public class UninstallScheduler extends ServiceScheduler {
                 plansResource,
                 new DeprecatedPlanResource(plansResource),
                 new HealthResource(Collections.singletonList(uninstallPlanManager)));
-
-        List<ResourceCleanupStep> resourceCleanupSteps = deployPlan.getChildren().stream()
-                .flatMap(phase -> phase.getChildren().stream())
-                .filter(step -> step instanceof ResourceCleanupStep)
-                .map(step -> (ResourceCleanupStep) step)
-                .collect(Collectors.toList());
-        this.offerAccepter = new OfferAccepter(
-                serviceSpec.getName(),
-                Collections.singletonList(new UninstallRecorder(stateStore, resourceCleanupSteps)));
-
         try {
             logger.info("Uninstall plan set to: {}", SerializationUtils.toJsonString(PlanInfo.forPlan(deployPlan)));
         } catch (IOException e) {
@@ -118,7 +113,7 @@ public class UninstallScheduler extends ServiceScheduler {
     }
 
     @Override
-    public Collection<Object> getResources() {
+    public Collection<Object> getHTTPEndpoints() {
         return resources;
     }
 
@@ -149,8 +144,7 @@ public class UninstallScheduler extends ServiceScheduler {
     }
 
     @Override
-    protected List<Protos.Offer> processOffers(List<Protos.Offer> offers, Collection<Step> steps) {
-        List<Protos.Offer> localOffers = new ArrayList<>(offers);
+    protected List<OfferRecommendation> processOffers(List<Protos.Offer> offers, Collection<Step> steps) {
         // Get candidate steps to be scheduled
         if (!steps.isEmpty()) {
             logger.info("Attempting to process {} candidates from uninstall plan: {}",
@@ -158,15 +152,27 @@ public class UninstallScheduler extends ServiceScheduler {
             steps.forEach(Step::start);
         }
 
-        // Destroy/Unreserve any reserved resource or volume that is offered
-        final List<Protos.OfferID> offersWithReservedResources = new ArrayList<>();
+        // No recommendations. Upstream should invoke the cleaner against any unexpected resources in unclaimed offers
+        // (including the ones that apply to our service), and then notify us via clean() so that we can record the ones
+        // that apply to us.
+        return Collections.emptyList();
+    }
 
-        ResourceCleanerScheduler rcs = new ResourceCleanerScheduler(new UninstallResourceCleaner(), offerAccepter);
+    @Override
+    public Collection<Protos.Resource> getExpectedResources() {
+        // We don't have any expected resources. We want everything to be uninstalled.
+        return Collections.emptyList();
+    }
 
-        offersWithReservedResources.addAll(rcs.resourceOffers(localOffers));
-
-        // Return remaining offers.
-        return OfferUtils.filterOutAcceptedOffers(localOffers, offersWithReservedResources);
+    @Override
+    public void cleaned(Collection<OfferRecommendation> recommendations) {
+        try {
+            // Mark any unreserved resources relevant to this service as no longer waiting for cleanup:
+            recorder.record(recommendations);
+        } catch (Exception ex) {
+            // TODO(nickbp): This doesn't undo the operation, so things could be left in a bad state.
+            logger.error("Failed to record cleanup operations", ex);
+        }
     }
 
     @Override

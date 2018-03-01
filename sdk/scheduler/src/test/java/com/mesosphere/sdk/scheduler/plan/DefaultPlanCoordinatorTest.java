@@ -1,6 +1,5 @@
 package com.mesosphere.sdk.scheduler.plan;
 
-import com.mesosphere.sdk.offer.OfferAccepter;
 import com.mesosphere.sdk.offer.evaluate.OfferEvaluator;
 import com.mesosphere.sdk.offer.history.OfferOutcomeTracker;
 import com.mesosphere.sdk.specification.*;
@@ -76,7 +75,7 @@ public class DefaultPlanCoordinatorTest extends DefaultCapabilitiesTestSuite {
     private DefaultServiceSpec serviceSpecificationB;
     private FrameworkStore frameworkStore;
     private StateStore stateStore;
-    private DefaultPlanScheduler planScheduler;
+    private PlanScheduler planScheduler;
     private StepFactory stepFactory;
     private PhaseFactory phaseFactory;
 
@@ -100,9 +99,8 @@ public class DefaultPlanCoordinatorTest extends DefaultCapabilitiesTestSuite {
         stepFactory = new DefaultStepFactory(mock(ConfigStore.class), stateStore);
         phaseFactory = new DefaultPhaseFactory(stepFactory);
 
-        planScheduler = new DefaultPlanScheduler(
+        planScheduler = new PlanScheduler(
                 TestConstants.SERVICE_NAME,
-                new OfferAccepter(TestConstants.SERVICE_NAME, Arrays.asList()),
                 new OfferEvaluator(
                         frameworkStore,
                         stateStore,

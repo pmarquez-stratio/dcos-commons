@@ -1,6 +1,5 @@
 package com.mesosphere.sdk.scheduler.uninstall;
 
-import com.google.protobuf.TextFormat;
 import com.mesosphere.sdk.offer.*;
 import com.mesosphere.sdk.state.StateStore;
 import org.apache.mesos.Protos;
@@ -27,39 +26,42 @@ public class UninstallRecorder implements OperationRecorder {
     }
 
     @Override
-    public void record(OfferRecommendation offerRecommendation) throws Exception {
-        if (!(offerRecommendation instanceof UninstallRecommendation)) {
-            return;
+    public void record(Collection<OfferRecommendation> offerRecommendations) throws Exception {
+        for (OfferRecommendation offerRecommendation : offerRecommendations) {
+            if (!(offerRecommendation instanceof UninstallRecommendation)) {
+                continue;
+            }
+
+            // each offerRec ought to be tied to a resource with an ID
+            UninstallRecommendation uninstallRecommendation = (UninstallRecommendation) offerRecommendation;
+            Protos.Resource resource = uninstallRecommendation.getResource();
+
+            // Find the task(s) referencing the resource in this UninstallRecommendation
+            List<Protos.TaskInfo> tasksToUpdate = stateStore.fetchTasks().stream()
+                    .filter(taskSpec -> containsResource(taskSpec, resource))
+                    .collect(Collectors.toList());
+            if (tasksToUpdate.isEmpty()) {
+                logger.info("Resource {}/{} found in 0 tasks",
+                        resource.getName(),
+                        ResourceUtils.getResourceId(resource));
+                continue;
+            }
+
+            logger.info("Resource {}/{} found in {} task{}: {}",
+                    resource.getName(),
+                    ResourceUtils.getResourceId(resource),
+                    tasksToUpdate.size(),
+                    tasksToUpdate.size() == 1 ? "" : "s",
+                    tasksToUpdate.stream().map(Protos.TaskInfo::getName).collect(Collectors.toList()));
+
+            stateStore.storeTasks(updateResources(resource, tasksToUpdate));
         }
-
-        // each offerRec ought to be tied to a resource with an ID
-        UninstallRecommendation uninstallRecommendation = (UninstallRecommendation) offerRecommendation;
-        Protos.Resource resource = uninstallRecommendation.getResource();
-        logger.info("Marking resource as uninstalled: {}", TextFormat.shortDebugString(resource));
-
-        // Find the tasks referencing the resource in this OfferRecommendation
-        List<Protos.TaskInfo> tasksToUpdate = stateStore.fetchTasks().stream()
-                .filter(taskSpec -> containsResource(taskSpec, resource))
-                .collect(Collectors.toList());
-        if (tasksToUpdate.isEmpty()) {
-            return;
-        }
-
-        logger.info("Resource {}/{} found in {} task{}: {}",
-                resource.getName(),
-                ResourceUtils.getResourceId(resource),
-                tasksToUpdate.size(),
-                tasksToUpdate.size() == 1 ? "" : "s",
-                tasksToUpdate.stream().map(Protos.TaskInfo::getName).collect(Collectors.toList()));
-
-        stateStore.storeTasks(updateResources(resource, tasksToUpdate));
 
         // Broadcast the resulting uninstallRecommendation to each resource step in the uninstall plan.
         // We need to manually pass the uninstall recommendation to the resource cleanup steps. They do not get this
         // information via DefaultPlanScheduler because that only handles deployment (and therefore is not used by
         // UninstallScheduler), whereas these are handled via the ResourceCleanerScheduler.
-        List<OfferRecommendation> uninstallRecommendations = Collections.singletonList(uninstallRecommendation);
-        resourceSteps.forEach(step -> step.updateOfferStatus(uninstallRecommendations));
+        resourceSteps.forEach(step -> step.updateOfferStatus(offerRecommendations));
     }
 
     private static boolean containsResource(Protos.TaskInfo taskInfo, Protos.Resource resource) {

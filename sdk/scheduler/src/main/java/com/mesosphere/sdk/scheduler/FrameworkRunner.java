@@ -39,7 +39,7 @@ public class FrameworkRunner {
         FrameworkScheduler frameworkScheduler = new FrameworkScheduler(persister, mesosEventClient);
         SchedulerApiServer.start(
                 schedulerConfig,
-                mesosEventClient.getResources(),
+                mesosEventClient.getHTTPEndpoints(),
                 new Runnable() {
             @Override
             public void run() {

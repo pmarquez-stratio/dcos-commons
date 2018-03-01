@@ -3,6 +3,8 @@ package com.mesosphere.sdk.scheduler;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.TextFormat;
 import com.mesosphere.sdk.offer.LoggingUtils;
+import com.mesosphere.sdk.offer.OfferRecommendation;
+import com.mesosphere.sdk.offer.OfferUtils;
 import com.mesosphere.sdk.reconciliation.Reconciler;
 import com.mesosphere.sdk.scheduler.plan.*;
 import com.mesosphere.sdk.scheduler.uninstall.UninstallScheduler;
@@ -145,7 +147,9 @@ public abstract class ServiceScheduler implements MesosEventClient {
             logger.info("  {}: {}", i + 1, TextFormat.shortDebugString(offers.get(i)));
         }
 
-        return OfferResponse.processed(processOffers(offers, steps));
+        List<OfferRecommendation> recommendations = processOffers(offers, steps);
+        List<Protos.Offer> unusedOffers = OfferUtils.filterOutAcceptedOffers(offers, recommendations);
+        return OfferResponse.processed(recommendations, unusedOffers);
     }
 
     private static Set<Step> getInProgressSteps(PlanCoordinator planCoordinator) {
@@ -201,7 +205,7 @@ public abstract class ServiceScheduler implements MesosEventClient {
      * @param offers zero or more offers (zero may periodically be passed to 'turn the crank' on other processing)
      * @param steps candidate steps which had been returned by the {@link PlanCoordinator}
      */
-    protected abstract List<Protos.Offer> processOffers(List<Protos.Offer> offers, Collection<Step> steps);
+    protected abstract List<OfferRecommendation> processOffers(List<Protos.Offer> offers, Collection<Step> steps);
 
     /**
      * Invoked when Mesos has provided a task status to be processed.

@@ -46,7 +46,7 @@ public class DecommissionRecorderTest {
 	public void beforeEach() {
 		MockitoAnnotations.initMocks(this);
         Capabilities.overrideCapabilities(mockCapabilities);
-        recorder = new DecommissionRecorder(mockStateStore, Arrays.asList(mockStep));
+        recorder = new DecommissionRecorder(TestConstants.SERVICE_NAME, mockStateStore, Arrays.asList(mockStep));
 
         taskResource = ResourceTestUtils.getReservedCpus(5, "matching-resource");
         otherResource = ResourceTestUtils.getReservedCpus(5, "other-resource");
@@ -65,7 +65,7 @@ public class DecommissionRecorderTest {
 	public void testDestroyNotFound() throws Exception {
 		when(mockStateStore.fetchGoalOverrideStatus(TestConstants.TASK_NAME))
 				.thenReturn(DecommissionPlanFactory.DECOMMISSIONING_STATUS);
-		recorder.record(new DestroyOfferRecommendation(null, otherResource));
+		recorder.record(Collections.singletonList(new DestroyOfferRecommendation(null, otherResource)));
 		verify(mockStateStore, times(0)).storeTasks(any());
 	}
 
@@ -73,7 +73,7 @@ public class DecommissionRecorderTest {
 	public void testUnreserveNotFound() throws Exception {
 		when(mockStateStore.fetchGoalOverrideStatus(TestConstants.TASK_NAME))
 				.thenReturn(DecommissionPlanFactory.DECOMMISSIONING_STATUS);
-		recorder.record(new UnreserveOfferRecommendation(null, otherResource));
+		recorder.record(Collections.singletonList(new UnreserveOfferRecommendation(null, otherResource)));
 		verify(mockStateStore, times(0)).storeTasks(any());
 	}
 
@@ -81,7 +81,7 @@ public class DecommissionRecorderTest {
 	public void testDestroyNotDecommissioning() throws Exception {
 		when(mockStateStore.fetchGoalOverrideStatus(TestConstants.TASK_NAME))
 				.thenReturn(GoalStateOverride.Status.INACTIVE);
-		recorder.record(new DestroyOfferRecommendation(null, taskResource));
+		recorder.record(Collections.singletonList(new DestroyOfferRecommendation(null, taskResource)));
 		verify(mockStateStore, times(0)).storeTasks(any());
 	}
 
@@ -89,7 +89,7 @@ public class DecommissionRecorderTest {
 	public void testUnreserveNotDecommissioning() throws Exception {
 		when(mockStateStore.fetchGoalOverrideStatus(TestConstants.TASK_NAME))
 				.thenReturn(GoalStateOverride.Status.INACTIVE);
-		recorder.record(new UnreserveOfferRecommendation(null, taskResource));
+		recorder.record(Collections.singletonList(new UnreserveOfferRecommendation(null, taskResource)));
 		verify(mockStateStore, times(0)).storeTasks(any());
 	}
 
@@ -97,7 +97,7 @@ public class DecommissionRecorderTest {
 	public void testDestroy() throws Exception {
 		when(mockStateStore.fetchGoalOverrideStatus(TestConstants.TASK_NAME))
 				.thenReturn(DecommissionPlanFactory.DECOMMISSIONING_STATUS);
-		recorder.record(new DestroyOfferRecommendation(null, taskResource));
+		recorder.record(Collections.singletonList(new DestroyOfferRecommendation(null, taskResource)));
 		verify(mockStateStore).storeTasks(Arrays.asList(emptyTaskA, emptyTaskB));
 	}
 
@@ -105,7 +105,7 @@ public class DecommissionRecorderTest {
 	public void testUnreserve() throws Exception {
 		when(mockStateStore.fetchGoalOverrideStatus(TestConstants.TASK_NAME))
 				.thenReturn(DecommissionPlanFactory.DECOMMISSIONING_STATUS);
-		recorder.record(new UnreserveOfferRecommendation(null, taskResource));
+		recorder.record(Collections.singletonList(new UnreserveOfferRecommendation(null, taskResource)));
 		verify(mockStateStore).storeTasks(Arrays.asList(emptyTaskA, emptyTaskB));
 	}
 }

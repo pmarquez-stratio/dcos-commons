@@ -59,7 +59,7 @@ public class ClusterState {
     }
 
     public Collection<Object> getResources() {
-        return scheduler.getResources();
+        return scheduler.getHTTPEndpoints();
     }
 
     /**

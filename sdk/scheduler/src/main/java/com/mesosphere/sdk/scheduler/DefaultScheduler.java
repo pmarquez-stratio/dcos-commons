@@ -1,6 +1,7 @@
 package com.mesosphere.sdk.scheduler;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.protobuf.TextFormat;
 import com.mesosphere.sdk.dcos.Capabilities;
 import com.mesosphere.sdk.http.endpoints.*;
 import com.mesosphere.sdk.http.types.EndpointProducer;
@@ -8,8 +9,10 @@ import com.mesosphere.sdk.http.types.StringPropertyDeserializer;
 import com.mesosphere.sdk.offer.*;
 import com.mesosphere.sdk.offer.evaluate.OfferEvaluator;
 import com.mesosphere.sdk.offer.history.OfferOutcomeTracker;
+import com.mesosphere.sdk.scheduler.decommission.DecommissionPlanFactory;
 import com.mesosphere.sdk.scheduler.decommission.DecommissionRecorder;
 import com.mesosphere.sdk.scheduler.plan.*;
+import com.mesosphere.sdk.scheduler.recovery.FailureUtils;
 import com.mesosphere.sdk.specification.ServiceSpec;
 import com.mesosphere.sdk.state.*;
 import com.mesosphere.sdk.storage.Persister;
@@ -31,9 +34,9 @@ public class DefaultScheduler extends ServiceScheduler {
     private final String serviceName;
     private final ConfigStore<ServiceSpec> configStore;
     private final PlanCoordinator planCoordinator;
-    private final OfferAccepter offerAccepter;
     private final Collection<Object> customResources;
     private final Map<String, EndpointProducer> customEndpointProducers;
+    private final Collection<OperationRecorder> recorders;
 
     private PlanScheduler planScheduler;
 
@@ -79,14 +82,22 @@ public class DefaultScheduler extends ServiceScheduler {
         this.serviceName = serviceSpec.getName();
         this.configStore = configStore;
         this.planCoordinator = planCoordinator;
-        this.offerAccepter = getOfferAccepter(stateStore, serviceSpec, planCoordinator);
         this.customResources = customResources;
         this.customEndpointProducers = customEndpointProducers;
 
+        this.recorders = new ArrayList<>();
+        this.recorders.add(new PersistentLaunchRecorder(stateStore, serviceSpec));
+        Optional<DecommissionPlanManager> decommissionManager = getDecommissionManager(planCoordinator);
+        if (decommissionManager.isPresent()) {
+            Collection<Step> steps = decommissionManager.get().getPlan().getChildren().stream()
+                    .flatMap(phase -> phase.getChildren().stream())
+                    .collect(Collectors.toList());
+            this.recorders.add(new DecommissionRecorder(serviceSpec.getName(), stateStore, steps));
+        }
+
         this.offerOutcomeTracker = new OfferOutcomeTracker();
-        this.planScheduler = new DefaultPlanScheduler(
+        this.planScheduler = new PlanScheduler(
                 serviceSpec.getName(),
-                offerAccepter,
                 new OfferEvaluator(
                         frameworkStore,
                         stateStore,
@@ -99,34 +110,8 @@ public class DefaultScheduler extends ServiceScheduler {
                 stateStore);
     }
 
-    private static OfferAccepter getOfferAccepter(
-            StateStore stateStore,
-            ServiceSpec serviceSpec,
-            PlanCoordinator planCoordinator) {
-
-        List<OperationRecorder> recorders = new ArrayList<>();
-        recorders.add(new PersistentLaunchRecorder(stateStore, serviceSpec));
-
-        Optional<DecommissionPlanManager> decommissionManager = getDecomissionManager(planCoordinator);
-        if (decommissionManager.isPresent()) {
-            Collection<Step> steps = decommissionManager.get().getPlan().getChildren().stream()
-                    .flatMap(phase -> phase.getChildren().stream())
-                    .collect(Collectors.toList());
-           recorders.add(new DecommissionRecorder(stateStore, steps));
-        }
-
-        return new OfferAccepter(serviceSpec.getName(), recorders);
-    }
-
-    private static Optional<DecommissionPlanManager> getDecomissionManager(PlanCoordinator planCoordinator) {
-        return planCoordinator.getPlanManagers().stream()
-                .filter(planManager -> planManager.getPlan().isDecommissionPlan())
-                .map(planManager -> (DecommissionPlanManager) planManager)
-                .findFirst();
-    }
-
     @Override
-    public Collection<Object> getResources() {
+    public Collection<Object> getHTTPEndpoints() {
         Collection<Object> resources = new ArrayList<>();
         resources.addAll(customResources);
         resources.add(new ArtifactResource(configStore));
@@ -160,7 +145,7 @@ public class DefaultScheduler extends ServiceScheduler {
     protected void registeredWithMesos() {
         Set<String> activeTasks = PlanUtils.getLaunchableTasks(getPlans());
 
-        Optional<DecommissionPlanManager> decomissionManager = getDecomissionManager(getPlanCoordinator());
+        Optional<DecommissionPlanManager> decomissionManager = getDecommissionManager(getPlanCoordinator());
         if (decomissionManager.isPresent()) {
             Collection<String> decommissionedTasks = decomissionManager.get().getTasksToDecommission().stream()
                     .map(taskInfo -> taskInfo.getName())
@@ -169,6 +154,13 @@ public class DefaultScheduler extends ServiceScheduler {
         }
 
         killUnneededTasks(stateStore, activeTasks);
+    }
+
+    private static Optional<DecommissionPlanManager> getDecommissionManager(PlanCoordinator planCoordinator) {
+        return planCoordinator.getPlanManagers().stream()
+                .filter(planManager -> planManager.getPlan().isDecommissionPlan())
+                .map(planManager -> (DecommissionPlanManager) planManager)
+                .findFirst();
     }
 
     private static void killUnneededTasks(StateStore stateStore, Set<String> taskToDeployNames) {
@@ -207,44 +199,55 @@ public class DefaultScheduler extends ServiceScheduler {
     }
 
     @Override
-    protected List<Protos.Offer> processOffers(List<Protos.Offer> offers, Collection<Step> steps) {
+    protected List<OfferRecommendation> processOffers(List<Protos.Offer> offers, Collection<Step> steps) {
         // See which offers are useful to the plans.
-        List<Protos.OfferID> planOffers = new ArrayList<>();
-        planOffers.addAll(planScheduler.resourceOffers(offers, steps));
-        List<Protos.Offer> unusedOffers = OfferUtils.filterOutAcceptedOffers(offers, planOffers);
-
-        // Resource Cleaning:
-        // A ResourceCleaner ensures that reserved Resources are not leaked.  It is possible that an Agent may
-        // become inoperable for long enough that Tasks resident there were relocated.  However, this Agent may
-        // return at a later point and begin offering reserved Resources again.  To ensure that these unexpected
-        // reserved Resources are returned to the Mesos Cluster, the Resource Cleaner performs all necessary
-        // UNRESERVE and DESTROY (in the case of persistent volumes) Operations.
-        // Note: If there are unused reserved resources on a dirtied offer, then it will be cleaned in the next
-        // offer cycle.
-        // Note: We reconstruct the instance every cycle to trigger internal reevaluation of expected resources.
-        ResourceCleanerScheduler cleanerScheduler =
-                new ResourceCleanerScheduler(new DefaultResourceCleaner(stateStore), offerAccepter);
-        List<Protos.OfferID> cleanerOffers = cleanerScheduler.resourceOffers(unusedOffers);
-        unusedOffers = OfferUtils.filterOutAcceptedOffers(unusedOffers, cleanerOffers);
+        List<OfferRecommendation> unfilteredRecommendations = planScheduler.resourceOffers(offers, steps);
+        List<Protos.Offer> unusedOffers = OfferUtils.filterOutAcceptedOffers(offers, unfilteredRecommendations);
 
         if (offers.isEmpty()) {
             logger.info("0 Offers processed.");
         } else {
             logger.info("{} Offer{} processed:\n"
                     + "  {} accepted by Plans: {}\n"
-                    + "  {} accepted by Resource Cleaner: {}\n"
                     + "  {} unused: {}",
                     offers.size(),
                     offers.size() == 1 ? "" : "s",
-                    planOffers.size(),
-                    planOffers.stream().map(Protos.OfferID::getValue).collect(Collectors.toList()),
-                    cleanerOffers.size(),
-                    cleanerOffers.stream().map(Protos.OfferID::getValue).collect(Collectors.toList()),
+                    unfilteredRecommendations.size(),
+                    unfilteredRecommendations.stream()
+                            .map(rec -> rec.getOffer().getId().getValue())
+                            .collect(Collectors.toList()),
                     unusedOffers.size(),
-                    unusedOffers.stream().map(offer -> offer.getId().getValue()).collect(Collectors.toList()));
+                    unusedOffers.stream()
+                            .map(offer -> offer.getId().getValue())
+                            .collect(Collectors.toList()));
         }
 
-        return unusedOffers;
+        List<OfferRecommendation> filteredOfferRecommendations = new ArrayList<>();
+        for (OfferRecommendation offerRecommendation : unfilteredRecommendations) {
+            if (offerRecommendation instanceof LaunchOfferRecommendation &&
+                    !((LaunchOfferRecommendation) offerRecommendation).shouldLaunch()) {
+                logger.info("Skipping launch of transient Operation: {}",
+                        TextFormat.shortDebugString(offerRecommendation.getOperation()));
+            } else {
+                filteredOfferRecommendations.add(offerRecommendation);
+            }
+        }
+
+        try {
+            for (OperationRecorder recorder : recorders) {
+                recorder.record(filteredOfferRecommendations);
+            }
+        } catch (Exception ex) {
+            // TODO(nickbp): This doesn't undo prior recorded operations, so things could be left in a bad state.
+            logger.error("Failed to record Operations", ex);
+        }
+
+        return filteredOfferRecommendations;
+    }
+
+    @Override
+    public void cleaned(Collection<OfferRecommendation> recommendations) {
+        // No-op
     }
 
     @Override
@@ -274,5 +277,20 @@ public class DefaultScheduler extends ServiceScheduler {
                 logger.warn("Unable to store network info for status update: " + status, e);
             }
         }
+    }
+
+    @Override
+    public Collection<Protos.Resource> getExpectedResources() {
+        return stateStore.fetchTasks().stream()
+                // The task's resources should be unreserved if:
+                // - the task is marked as permanently failed, or
+                // - the task is in the process of being decommissioned
+                .filter(taskInfo ->
+                        !FailureUtils.isPermanentlyFailed(taskInfo) &&
+                        !stateStore.fetchGoalOverrideStatus(taskInfo.getName())
+                                .equals(DecommissionPlanFactory.DECOMMISSIONING_STATUS))
+                .map(ResourceUtils::getAllResources)
+                .flatMap(Collection::stream)
+                .collect(Collectors.toList());
     }
 }

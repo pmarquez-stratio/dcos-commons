@@ -21,8 +21,11 @@ import org.mockito.MockitoAnnotations;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
+import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.*;
 
 public class OfferAccepterTest {
@@ -83,6 +86,64 @@ public class OfferAccepterTest {
                 anyObject());
     }
 
+    @Test
+    public void testResourceOffers() {
+        scheduler.resourceOffers(offers);
+        verify(offerAccepter, times(2)).accept(any());
+    }
+
+    @Test
+    public void testGroupRecommendationsByAgent() {
+        Protos.Offer offerA = Protos.Offer.newBuilder(Protos.Offer.getDefaultInstance())
+                .setHostname("A")
+                .setSlaveId(Protos.SlaveID.newBuilder().setValue("A").build())
+                .setId(Protos.OfferID.newBuilder().setValue("A"))
+                .setFrameworkId(Protos.FrameworkID.newBuilder().setValue("A"))
+                .build();
+        Protos.Offer offerB = Protos.Offer.newBuilder(Protos.Offer.getDefaultInstance())
+                .setHostname("B")
+                .setSlaveId(Protos.SlaveID.newBuilder().setValue("B").build())
+                .setId(Protos.OfferID.newBuilder().setValue("B"))
+                .setFrameworkId(Protos.FrameworkID.newBuilder().setValue("B"))
+                .build();
+
+        List<Protos.Offer> offers = Arrays.asList(offerA, offerB);
+
+        final DestroyOfferRecommendation destroyRecommendationA =
+                new DestroyOfferRecommendation(offerA, ResourceTestUtils.getUnreservedCpus(1.0));
+        final DestroyOfferRecommendation destroyRecommendationB =
+                new DestroyOfferRecommendation(offerB, ResourceTestUtils.getUnreservedCpus(1.0));
+        final UnreserveOfferRecommendation unreserveRecommendationA =
+                new UnreserveOfferRecommendation(offerA, ResourceTestUtils.getUnreservedCpus(1.0));
+        final UnreserveOfferRecommendation unreserveRecommendationB =
+                new UnreserveOfferRecommendation(offerB, ResourceTestUtils.getUnreservedCpus(1.0));
+
+        List<OfferRecommendation> recommendations = Arrays.asList(
+                destroyRecommendationA,
+                destroyRecommendationB,
+                unreserveRecommendationA,
+                unreserveRecommendationB);
+        when(resourceCleaner.evaluate(offers)).thenReturn(recommendations);
+
+        final Map<Protos.SlaveID, List<OfferRecommendation>> group = scheduler.groupByAgent(recommendations);
+        Assert.assertTrue(group.size() == 2);
+        Protos.SlaveID prevSlaveID = null;
+        for (Map.Entry<Protos.SlaveID, List<OfferRecommendation>> entry : group.entrySet()) {
+            final List<OfferRecommendation> recommendations = entry.getValue();
+            Assert.assertNotNull(recommendations);
+            Assert.assertTrue(recommendations.size() == 2);
+            final Protos.SlaveID key = entry.getKey();
+            Assert.assertEquals(key, recommendations.get(0).getOffer().getSlaveId());
+            Assert.assertEquals(key, recommendations.get(1).getOffer().getSlaveId());
+
+            if (prevSlaveID != null) {
+                Assert.assertNotEquals(key, prevSlaveID);
+            }
+
+            prevSlaveID = key;
+        }
+    }
+
     public static class TestOperationRecorder implements OperationRecorder {
         private List<Operation> reserves = new ArrayList<>();
         private List<Operation> unreserves = new ArrayList<>();
@@ -90,29 +151,31 @@ public class OfferAccepterTest {
         private List<Operation> destroys = new ArrayList<>();
         private List<Operation> launches = new ArrayList<>();
 
-        public void record(OfferRecommendation offerRecommendation) throws Exception {
-            Operation operation = offerRecommendation.getOperation();
-            switch (operation.getType()) {
-                case UNRESERVE:
-                    unreserves.add(operation);
-                    break;
-                case RESERVE:
-                    reserves.add(operation);
-                    break;
-                case CREATE:
-                    creates.add(operation);
-                    break;
-                case DESTROY:
-                    destroys.add(operation);
-                    break;
-                case LAUNCH_GROUP:
-                    launches.add(operation);
-                    break;
-                case LAUNCH:
-                    launches.add(operation);
-                    break;
-                default:
-                    throw new Exception("Unknown operation type encountered");
+        public void record(Collection<OfferRecommendation> offerRecommendations) throws Exception {
+            for (OfferRecommendation offerRecommendation : offerRecommendations) {
+                Operation operation = offerRecommendation.getOperation();
+                switch (operation.getType()) {
+                    case UNRESERVE:
+                        unreserves.add(operation);
+                        break;
+                    case RESERVE:
+                        reserves.add(operation);
+                        break;
+                    case CREATE:
+                        creates.add(operation);
+                        break;
+                    case DESTROY:
+                        destroys.add(operation);
+                        break;
+                    case LAUNCH_GROUP:
+                        launches.add(operation);
+                        break;
+                    case LAUNCH:
+                        launches.add(operation);
+                        break;
+                    default:
+                        throw new Exception("Unknown operation type encountered");
+                }
             }
         }
 

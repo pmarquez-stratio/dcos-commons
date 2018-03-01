@@ -7,11 +7,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.apache.mesos.Protos;
+import org.apache.mesos.Protos.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.mesosphere.sdk.http.endpoints.*;
 import com.mesosphere.sdk.http.types.StringPropertyDeserializer;
+import com.mesosphere.sdk.offer.OfferRecommendation;
 import com.mesosphere.sdk.queues.http.endpoints.*;
 import com.mesosphere.sdk.scheduler.MesosEventClient;
 import com.mesosphere.sdk.scheduler.ServiceScheduler;
@@ -86,6 +88,7 @@ public class JobsEventClient implements MesosEventClient {
         // If we don't have any sub-clients, then WE aren't ready.
         boolean allNotReady = true;
 
+        List<OfferRecommendation> recommendations = new ArrayList<>();
         List<Protos.Offer> unusedOffers = new ArrayList<>();
         unusedOffers.addAll(offers);
 
@@ -96,7 +99,9 @@ public class JobsEventClient implements MesosEventClient {
                 // Create a new list with unused offers. Avoid clearing in-place, in case response is the original list.
                 unusedOffers = new ArrayList<>();
                 unusedOffers.addAll(response.unusedOffers);
-                LOGGER.info("  response={}, unusedOffers={}", response.result, unusedOffers.size());
+                recommendations.addAll(response.recommendations);
+                LOGGER.info("  response={}: recommendations={} unusedOffers={}",
+                        response.result, response.recommendations.size(), response.unusedOffers.size());
 
                 if (response.result != OfferResponse.Result.NOT_READY) {
                     allNotReady = false;
@@ -112,12 +117,12 @@ public class JobsEventClient implements MesosEventClient {
         LOGGER.info("  allNotReady={}", allNotReady);
         return allNotReady
                 ? OfferResponse.notReady(unusedOffers)
-                : OfferResponse.processed(unusedOffers);
+                : OfferResponse.processed(recommendations, unusedOffers);
     }
 
     @Override
     public StatusResponse status(Protos.TaskStatus status) {
-        LOGGER.info("status {}={}", status.getTaskId(), status.getState());
+        LOGGER.info("status {}={}", status.getTaskId().getValue(), status.getState());
         // TODO(nickbp) for the multi-service case:
         // - embed the service id in task ids
         // - use status.task_id to map status => service (or kill task here if service id is unknown or invalid)
@@ -140,7 +145,7 @@ public class JobsEventClient implements MesosEventClient {
     }
 
     @Override
-    public Collection<Object> getResources() {
+    public Collection<Object> getHTTPEndpoints() {
         return Arrays.asList(
                 // TODO(nickbp): this will be ALWAYS HEALTHY... Options:
                 // - add some plans from a parent queue scheduler? (if we should have one)
@@ -152,5 +157,24 @@ public class JobsEventClient implements MesosEventClient {
                 new JobsPlansResource(jobInfoProvider),
                 new JobsPodResource(jobInfoProvider),
                 new JobsStateResource(jobInfoProvider, new StringPropertyDeserializer()));
+    }
+
+    @Override
+    public Collection<Resource> getExpectedResources() {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public void cleaned(Collection<OfferRecommendation> recommendations) {
+        LOGGER.info("cleaned {}", recommendations.size());
+        Collection<ServiceScheduler> jobs = jobInfoProvider.lockR();
+        try {
+            for (MesosEventClient job : jobs) {
+                job.cleaned(recommendations);
+            }
+        } finally {
+            jobInfoProvider.unlockR();
+        }
     }
 }

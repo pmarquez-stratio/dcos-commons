@@ -10,9 +10,11 @@ import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.apache.mesos.Protos;
+import org.apache.mesos.Protos.Resource;
 import org.apache.mesos.SchedulerDriver;
 
 import com.mesosphere.sdk.dcos.clients.SecretsClient;
+import com.mesosphere.sdk.offer.OfferRecommendation;
 import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
 import com.mesosphere.sdk.scheduler.plan.PlanCoordinator;
 import com.mesosphere.sdk.scheduler.plan.Step;
@@ -100,7 +102,7 @@ public class ServiceSchedulerTest {
         }
 
         @Override
-        public Collection<Object> getResources() {
+        public Collection<Object> getHTTPEndpoints() {
             return Collections.emptyList();
         }
 
@@ -120,7 +122,7 @@ public class ServiceSchedulerTest {
         }
 
         @Override
-        protected List<Protos.Offer> processOffers(List<Protos.Offer> offers, Collection<Step> steps) {
+        protected List<OfferRecommendation> processOffers(List<Protos.Offer> offers, Collection<Step> steps) {
             return Collections.emptyList();
         }
 
@@ -128,6 +130,16 @@ public class ServiceSchedulerTest {
         protected void processStatusUpdate(Protos.TaskStatus status) throws Exception {
             String taskName = StateStoreUtils.getTaskName(stateStore, status);
             stateStore.storeStatus(taskName, status);
+        }
+
+        @Override
+        public Collection<Resource> getExpectedResources() {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public void cleaned(Collection<OfferRecommendation> recommendations) {
+            // No-op
         }
     }
 }
