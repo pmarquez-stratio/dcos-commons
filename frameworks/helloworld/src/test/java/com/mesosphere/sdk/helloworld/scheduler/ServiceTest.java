@@ -575,7 +575,11 @@ public class ServiceTest {
             for (StepCount stepCount : stepCounts) {
                 Phase phase = phases.get(stepCount.phaseName);
                 Map<String, Status> stepStatuses = phase.getChildren().stream()
-                        .collect(Collectors.toMap(Step::getName, Step::getStatus));
+                        .collect(Collectors.toMap(
+                                Step::getName,
+                                Step::getStatus,
+                                (u,v) -> { throw new IllegalStateException(String.format("Duplicate key %s", u)); },
+                                TreeMap::new));
                 Assert.assertEquals(
                         String.format("Number of steps doesn't match expectation in %s: %s", stepCount, stepStatuses),
                         stepCount.pendingCount + stepCount.preparedCount + stepCount.completedCount,
@@ -588,7 +592,7 @@ public class ServiceTest {
         }
 
         private static Map<String, Status> getExpectedStepStatuses(ClusterState state, StepCount stepCount) {
-            Map<String, Status> expectedSteps = new HashMap<>();
+            Map<String, Status> expectedSteps = new TreeMap<>();
             expectedSteps.put(String.format("kill-%s-server", stepCount.phaseName),
                     stepCount.statusOfStepIndex(expectedSteps.size()));
             LaunchedPod pod = state.getLastLaunchedPod(stepCount.phaseName);

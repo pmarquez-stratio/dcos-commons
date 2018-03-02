@@ -149,6 +149,7 @@ public abstract class ServiceScheduler implements MesosEventClient {
 
         List<OfferRecommendation> recommendations = processOffers(offers, steps);
         List<Protos.Offer> unusedOffers = OfferUtils.filterOutAcceptedOffers(offers, recommendations);
+
         return OfferResponse.processed(recommendations, unusedOffers);
     }
 

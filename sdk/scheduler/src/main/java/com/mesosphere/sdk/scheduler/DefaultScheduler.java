@@ -30,17 +30,16 @@ import java.util.stream.Collectors;
  */
 public class DefaultScheduler extends ServiceScheduler {
 
-    private final Logger logger;
     private final String serviceName;
+    private final Logger logger;
     private final ConfigStore<ServiceSpec> configStore;
     private final PlanCoordinator planCoordinator;
     private final Collection<Object> customResources;
     private final Map<String, EndpointProducer> customEndpointProducers;
-    private final Collection<OperationRecorder> recorders;
-
-    private PlanScheduler planScheduler;
-
+    private final OperationRecorder launchRecorder;
+    private final Optional<OperationRecorder> decommissionRecorder;
     private final OfferOutcomeTracker offerOutcomeTracker;
+    private final PlanScheduler planScheduler;
 
     /**
      * Creates a new {@link SchedulerBuilder} based on the provided {@link ServiceSpec} describing the service,
@@ -78,21 +77,22 @@ public class DefaultScheduler extends ServiceScheduler {
             ConfigStore<ServiceSpec> configStore,
             Map<String, EndpointProducer> customEndpointProducers) throws ConfigStoreException {
         super(serviceSpec.getName(), frameworkStore, stateStore, schedulerConfig, planCustomizer);
-        this.logger = LoggingUtils.getLogger(getClass(), serviceSpec.getName());
         this.serviceName = serviceSpec.getName();
+        this.logger = LoggingUtils.getLogger(getClass(), serviceName);
         this.configStore = configStore;
         this.planCoordinator = planCoordinator;
         this.customResources = customResources;
         this.customEndpointProducers = customEndpointProducers;
 
-        this.recorders = new ArrayList<>();
-        this.recorders.add(new PersistentLaunchRecorder(stateStore, serviceSpec));
+        this.launchRecorder = new PersistentLaunchRecorder(stateStore, serviceSpec);
         Optional<DecommissionPlanManager> decommissionManager = getDecommissionManager(planCoordinator);
         if (decommissionManager.isPresent()) {
             Collection<Step> steps = decommissionManager.get().getPlan().getChildren().stream()
                     .flatMap(phase -> phase.getChildren().stream())
                     .collect(Collectors.toList());
-            this.recorders.add(new DecommissionRecorder(serviceSpec.getName(), stateStore, steps));
+            this.decommissionRecorder = Optional.of(new DecommissionRecorder(serviceSpec.getName(), stateStore, steps));
+        } else {
+            this.decommissionRecorder = Optional.empty();
         }
 
         this.offerOutcomeTracker = new OfferOutcomeTracker();
@@ -200,30 +200,41 @@ public class DefaultScheduler extends ServiceScheduler {
 
     @Override
     protected List<OfferRecommendation> processOffers(List<Protos.Offer> offers, Collection<Step> steps) {
-        // See which offers are useful to the plans.
-        List<OfferRecommendation> unfilteredRecommendations = planScheduler.resourceOffers(offers, steps);
-        List<Protos.Offer> unusedOffers = OfferUtils.filterOutAcceptedOffers(offers, unfilteredRecommendations);
+        // See which offers are useful to the plans, then omit the ones that shouldn't be launched.
+        List<OfferRecommendation> offerRecommendations = getOfferRecommendations(logger, planScheduler, offers, steps);
 
-        if (offers.isEmpty()) {
-            logger.info("0 Offers processed.");
-        } else {
-            logger.info("{} Offer{} processed:\n"
-                    + "  {} accepted by Plans: {}\n"
-                    + "  {} unused: {}",
-                    offers.size(),
-                    offers.size() == 1 ? "" : "s",
-                    unfilteredRecommendations.size(),
-                    unfilteredRecommendations.stream()
-                            .map(rec -> rec.getOffer().getId().getValue())
-                            .collect(Collectors.toList()),
-                    unusedOffers.size(),
-                    unusedOffers.stream()
-                            .map(offer -> offer.getId().getValue())
-                            .collect(Collectors.toList()));
+        logger.info("{} Offer{} processed: {} accepted by {} scheduler: {}",
+                offers.size(),
+                offers.size() == 1 ? "" : "s",
+                offerRecommendations.size(),
+                serviceName,
+                offerRecommendations.stream()
+                        .map(rec -> rec.getOffer().getId().getValue())
+                        .collect(Collectors.toList()));
+
+        try {
+            launchRecorder.record(offerRecommendations);
+            if (decommissionRecorder.isPresent()) {
+                decommissionRecorder.get().record(offerRecommendations);
+            }
+        } catch (Exception ex) {
+            // TODO(nickbp): This doesn't undo prior recorded operations, so things could be left in a bad state.
+            logger.error("Failed to record offer operations", ex);
         }
 
+        return offerRecommendations;
+    }
+
+    /**
+     * Returns the operations to be performed against the provided steps, according to the provided
+     * {@link PlanScheduler}. Any {@link LaunchOfferRecommendation}s with {@code !shouldLaunch()} will be omitted from
+     * the returned list.
+     */
+    @VisibleForTesting
+    static List<OfferRecommendation> getOfferRecommendations(
+            Logger logger, PlanScheduler planScheduler, List<Protos.Offer> offers, Collection<Step> steps) {
         List<OfferRecommendation> filteredOfferRecommendations = new ArrayList<>();
-        for (OfferRecommendation offerRecommendation : unfilteredRecommendations) {
+        for (OfferRecommendation offerRecommendation : planScheduler.resourceOffers(offers, steps)) {
             if (offerRecommendation instanceof LaunchOfferRecommendation &&
                     !((LaunchOfferRecommendation) offerRecommendation).shouldLaunch()) {
                 logger.info("Skipping launch of transient Operation: {}",
@@ -232,22 +243,19 @@ public class DefaultScheduler extends ServiceScheduler {
                 filteredOfferRecommendations.add(offerRecommendation);
             }
         }
-
-        try {
-            for (OperationRecorder recorder : recorders) {
-                recorder.record(filteredOfferRecommendations);
-            }
-        } catch (Exception ex) {
-            // TODO(nickbp): This doesn't undo prior recorded operations, so things could be left in a bad state.
-            logger.error("Failed to record Operations", ex);
-        }
-
         return filteredOfferRecommendations;
     }
 
     @Override
     public void cleaned(Collection<OfferRecommendation> recommendations) {
-        // No-op
+        try {
+            if (decommissionRecorder.isPresent()) {
+                decommissionRecorder.get().record(recommendations);
+            }
+        } catch (Exception ex) {
+            // TODO(nickbp): This doesn't undo prior recorded operations, so things could be left in a bad state.
+            logger.error("Failed to record cleanup operations", ex);
+        }
     }
 
     @Override

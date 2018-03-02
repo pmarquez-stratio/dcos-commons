@@ -20,9 +20,6 @@ public class LaunchEvaluationStage implements OfferEvaluationStage {
     private final boolean shouldLaunch;
     private final boolean useDefaultExecutor;
 
-    public LaunchEvaluationStage(String taskName) {
-        this(taskName, true, true);
-    }
     public LaunchEvaluationStage(String taskName, boolean shouldLaunch, boolean useDefaultExecutor) {
         this.taskName = taskName;
         this.shouldLaunch = shouldLaunch;

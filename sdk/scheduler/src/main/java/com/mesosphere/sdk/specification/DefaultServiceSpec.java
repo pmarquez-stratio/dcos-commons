@@ -413,7 +413,7 @@ public class DefaultServiceSpec implements ServiceSpec {
             }
         }
 
-        static private GoalState getReferenceTerminalGoalState(ServiceSpec serviceSpec) {
+        private static GoalState getReferenceTerminalGoalState(ServiceSpec serviceSpec) {
             Collection<TaskSpec> serviceTasks =
                     serviceSpec.getPods().stream().flatMap(p -> p.getTasks().stream()).collect(Collectors.toList());
             for (TaskSpec taskSpec : serviceTasks) {

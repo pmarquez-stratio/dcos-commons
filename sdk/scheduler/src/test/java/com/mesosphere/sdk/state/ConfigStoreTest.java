@@ -15,8 +15,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.UUID;
 
-import static org.junit.Assert.*;
-
 /**
  * Tests for {@link ConfigStore}.
  */
@@ -39,7 +37,7 @@ public class ConfigStoreTest {
     @Test
     public void testStoreConfig() throws Exception {
         UUID testId = store.store(testConfig);
-        assertTrue(testId != null);
+        Assert.assertTrue(testId != null);
     }
 
     @Test
@@ -48,16 +46,16 @@ public class ConfigStoreTest {
         store.setTargetConfig(id);
 
         // Check that data is at root path:
-        assertEquals(id.toString(), new String(persister.get("ConfigTarget"), StandardCharsets.UTF_8));
-        assertNotEquals(0, persister.get("Configurations/" + id.toString()).length);
+        Assert.assertEquals(id.toString(), new String(persister.get("ConfigTarget"), StandardCharsets.UTF_8));
+        Assert.assertNotEquals(0, persister.get("Configurations/" + id.toString()).length);
 
         // Check that data is NOT in namespaced path:
         checkPathNotFound(NAMESPACE_PATH + "/ConfigTarget");
         checkPathNotFound(NAMESPACE_PATH + "/Configurations/" + id.toString());
 
         // Check that data is accessible as expected:
-        assertEquals(id, store.getTargetConfig());
-        assertEquals(testConfig, store.fetch(id));
+        Assert.assertEquals(id, store.getTargetConfig());
+        Assert.assertEquals(testConfig, store.fetch(id));
     }
 
     @Test
@@ -67,23 +65,23 @@ public class ConfigStoreTest {
         store.setTargetConfig(id);
 
         // Check that data is in namespaced path:
-        assertEquals(id.toString(), new String(persister.get(NAMESPACE_PATH + "/ConfigTarget"), StandardCharsets.UTF_8));
-        assertNotEquals(0, persister.get(NAMESPACE_PATH + "/Configurations/" + id.toString()).length);
+        Assert.assertEquals(id.toString(), new String(persister.get(NAMESPACE_PATH + "/ConfigTarget"), StandardCharsets.UTF_8));
+        Assert.assertNotEquals(0, persister.get(NAMESPACE_PATH + "/Configurations/" + id.toString()).length);
 
         // Check that data is NOT in root path:
         checkPathNotFound("ConfigTarget");
         checkPathNotFound("Configurations/" + id.toString());
 
         // Check that data is accessible as expected:
-        assertEquals(id, store.getTargetConfig());
-        assertEquals(testConfig, store.fetch(id));
+        Assert.assertEquals(id, store.getTargetConfig());
+        Assert.assertEquals(testConfig, store.fetch(id));
     }
 
     @Test
     public void testStoreFetchConfig() throws Exception {
         UUID testId = store.store(testConfig);
         StringConfiguration config = store.fetch(testId);
-        assertEquals(testConfig, config);
+        Assert.assertEquals(testConfig, config);
     }
 
     @Test
@@ -111,11 +109,11 @@ public class ConfigStoreTest {
         ids.add(store.store(testConfig));
         ids.add(store.store(testConfig));
 
-        assertEquals(3, ids.size());
-        assertEquals(3, store.list().size());
+        Assert.assertEquals(3, ids.size());
+        Assert.assertEquals(3, store.list().size());
 
         for (UUID id : ids) {
-            assertTrue(store.list().contains(id));
+            Assert.assertTrue(store.list().contains(id));
         }
     }
 
@@ -123,7 +121,7 @@ public class ConfigStoreTest {
     public void testStoreSetTargetConfigGetTargetConfig() throws Exception {
         UUID testId = store.store(testConfig);
         store.setTargetConfig(testId);
-        assertEquals(testId, store.getTargetConfig());
+        Assert.assertEquals(testId, store.getTargetConfig());
     }
 
     @Test
@@ -153,7 +151,7 @@ public class ConfigStoreTest {
         try {
             persister.get(path);
         } catch (PersisterException e) {
-            assertEquals(StorageError.Reason.NOT_FOUND, e.getReason());
+            Assert.assertEquals(StorageError.Reason.NOT_FOUND, e.getReason());
         }
     }
 }

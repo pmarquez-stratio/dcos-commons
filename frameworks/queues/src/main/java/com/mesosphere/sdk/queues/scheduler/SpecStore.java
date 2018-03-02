@@ -6,9 +6,7 @@ import com.mesosphere.sdk.state.ConfigStore;
 import com.mesosphere.sdk.state.ConfigStoreException;
 import com.mesosphere.sdk.storage.Persister;
 import org.apache.commons.codec.digest.DigestUtils;
-import org.apache.commons.lang3.builder.HashCodeBuilder;
 
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -17,12 +15,9 @@ import java.util.UUID;
 public class SpecStore {
     private static final String SPECS_ROOT_NAME = "Specs";
 
-    private final Persister persister;
     private final ConfigStore<ServiceSpec> configStore;
-    private final Object lock = new Object();
 
     public SpecStore(Persister persister) {
-        this.persister = persister;
         this.configStore = new ConfigStore<ServiceSpec>(
                 DefaultServiceSpec.getConfigurationFactory(),
                 persister,

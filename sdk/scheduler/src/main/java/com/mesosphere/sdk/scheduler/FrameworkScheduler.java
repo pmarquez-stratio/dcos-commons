@@ -7,10 +7,10 @@ import org.apache.mesos.Protos;
 import org.apache.mesos.Scheduler;
 import org.apache.mesos.SchedulerDriver;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.TextFormat;
+import com.mesosphere.sdk.offer.LoggingUtils;
 import com.mesosphere.sdk.offer.evaluate.placement.IsLocalRegionRule;
 import com.mesosphere.sdk.scheduler.MesosEventClient.StatusResponse;
 import com.mesosphere.sdk.state.FrameworkStore;
@@ -23,7 +23,7 @@ import com.mesosphere.sdk.storage.Persister;
  */
 public class FrameworkScheduler implements Scheduler {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(FrameworkScheduler.class);
+    private static final Logger LOGGER = LoggingUtils.getLogger(FrameworkScheduler.class);
 
     /**
      * Mesos may call registered() multiple times in the lifespan of a Scheduler process, specifically when there's

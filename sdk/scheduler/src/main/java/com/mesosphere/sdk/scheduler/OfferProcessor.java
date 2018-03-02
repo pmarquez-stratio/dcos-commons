@@ -15,11 +15,11 @@ import java.util.stream.Collectors;
 import org.apache.mesos.Protos;
 import org.apache.mesos.SchedulerDriver;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.codahale.metrics.Timer;
 import com.google.common.annotations.VisibleForTesting;
 import com.mesosphere.sdk.offer.Constants;
+import com.mesosphere.sdk.offer.LoggingUtils;
 import com.mesosphere.sdk.offer.OfferAccepter;
 import com.mesosphere.sdk.offer.OfferRecommendation;
 import com.mesosphere.sdk.offer.OfferUtils;
@@ -32,7 +32,7 @@ import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
  */
 class OfferProcessor {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(OfferProcessor.class);
+    private static final Logger LOGGER = LoggingUtils.getLogger(OfferProcessor.class);
 
     // Avoid attempting to process offers until initialization has completed via the first call to registered().
     private final AtomicBoolean isInitialized = new AtomicBoolean(false);

@@ -7,7 +7,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.mesos.Protos;
 import org.apache.mesos.SchedulerDriver;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -22,7 +21,7 @@ public class OfferAccepter {
      */
     private static final Protos.Filters FILTERS = Protos.Filters.newBuilder().setRefuseSeconds(1).build();
 
-    private final Logger logger = LoggerFactory.getLogger(getClass());
+    private final Logger logger = LoggingUtils.getLogger(getClass());
 
     public void accept(List<OfferRecommendation> allRecommendations) {
         if (CollectionUtils.isEmpty(allRecommendations)) {

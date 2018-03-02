@@ -91,7 +91,7 @@ public class DeploymentStep extends AbstractStep {
         return recommendations.stream()
                 .filter(recommendation -> recommendation instanceof LaunchOfferRecommendation)
                 .map(recommendation -> ((LaunchOfferRecommendation) recommendation).getStoreableTaskInfo())
-                .filter(taskInfo -> !taskInfo.getTaskId().getValue().equals(""))
+                .filter(taskInfo -> !taskInfo.getTaskId().getValue().isEmpty())
                 .collect(Collectors.toSet());
     }
 
@@ -112,7 +112,8 @@ public class DeploymentStep extends AbstractStep {
         getTaskInfos(recommendations)
                 .forEach(taskInfo -> tasks.put(taskInfo.getTaskId(), new TaskStatusPair(taskInfo, Status.PREPARED)));
 
-        logger.info("Step '{} [{}]' is now waiting for updates for task IDs: {}", getName(), getId(), tasks.keySet());
+        logger.info("Step '{} [{}]' is now waiting for updates for task IDs: {}",
+                getName(), getId(), tasks.keySet().stream().map(Protos.TaskID::getValue).collect(Collectors.toList()));
 
         if (recommendations.isEmpty()) {
             tasks.keySet().forEach(id -> setTaskStatus(id, Status.PREPARED));

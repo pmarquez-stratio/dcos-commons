@@ -2,6 +2,7 @@ package com.mesosphere.sdk.testing;
 
 import com.mesosphere.sdk.config.validate.ConfigValidator;
 import com.mesosphere.sdk.dcos.Capabilities;
+import com.mesosphere.sdk.offer.LoggingUtils;
 import com.mesosphere.sdk.offer.evaluate.PodInfoBuilder;
 import com.mesosphere.sdk.scheduler.ServiceScheduler;
 import com.mesosphere.sdk.scheduler.TaskKiller;
@@ -18,7 +19,6 @@ import com.mesosphere.sdk.storage.Persister;
 import org.apache.mesos.SchedulerDriver;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.util.*;
@@ -29,7 +29,7 @@ import java.util.*;
  */
 public class ServiceTestRunner {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ServiceTestRunner.class);
+    private static final Logger LOGGER = LoggingUtils.getLogger(ServiceTestRunner.class);
     private static final Random RANDOM = new Random();
 
     /**
@@ -55,7 +55,7 @@ public class ServiceTestRunner {
     private final Map<String, Map<String, String>> customPodEnvs = new HashMap<>();
     private RecoveryPlanOverriderFactory recoveryManagerFactory;
     private boolean supportsDefaultExecutor = true;
-    private List<ConfigValidator<ServiceSpec>> validators = Collections.emptyList();
+    private List<ConfigValidator<ServiceSpec>> validators = new ArrayList<>();
 
     /**
      * Returns a {@link File} object for the service's {@code src/main/dist} directory. Does not check if the directory
@@ -245,9 +245,8 @@ public class ServiceTestRunner {
      * Assigns a list of custom configuration validators which will be applied to service configurations, in addition to
      * the default configuration validators.
      */
-    @SuppressWarnings("unchecked")
-    public ServiceTestRunner setCustomValidators(ConfigValidator<ServiceSpec>... validators) {
-        this.validators = Arrays.asList(validators);
+    public ServiceTestRunner addCustomValidator(ConfigValidator<ServiceSpec> validator) {
+        this.validators.add(validator);
         return this;
     }
 
@@ -372,6 +371,7 @@ public class ServiceTestRunner {
         StringJoiner errorRows = new StringJoiner("\n");
         errorRows.add(String.format("Expectation failed: %s", failedTick.getDescription()));
         errorRows.add("Simulation steps:");
+        int i = 0;
         for (SimulationTick tick : allTicks) {
             String prefix = tick == failedTick ? ">>>FAIL<<< " : "";
             if (tick instanceof Expect) {
@@ -381,7 +381,7 @@ public class ServiceTestRunner {
             } else {
                 prefix += "???";
             }
-            errorRows.add(String.format("- %s %s", prefix, tick.getDescription()));
+            errorRows.add(String.format("%2s %s %s", ++i, prefix, tick.getDescription()));
         }
         // Print the original message last, because junit output will truncate based on its content:
         errorRows.add(String.format("Failure was: %s", originalError.getMessage()));

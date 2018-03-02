@@ -28,7 +28,7 @@ public class DecommissionRecorder implements OperationRecorder {
     public void record(Collection<OfferRecommendation> offerRecommendations) throws Exception {
         for (OfferRecommendation offerRecommendation : offerRecommendations) {
             if (!(offerRecommendation instanceof UninstallRecommendation)) {
-                return;
+                continue;
             }
             Protos.Resource resource = ((UninstallRecommendation) offerRecommendation).getResource();
 
@@ -39,7 +39,7 @@ public class DecommissionRecorder implements OperationRecorder {
                                     .equals(DecommissionPlanFactory.DECOMMISSIONING_STATUS))
                     .collect(Collectors.toList());
             if (tasksToUpdate.isEmpty()) {
-                return;
+                continue;
             }
 
             logger.info("Resource {}/{} found in {} decommissioning task{}: {}",
