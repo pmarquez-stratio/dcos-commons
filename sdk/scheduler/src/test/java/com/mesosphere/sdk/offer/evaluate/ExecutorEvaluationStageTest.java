@@ -45,7 +45,7 @@ public class ExecutorEvaluationStageTest extends OfferEvaluatorTestBase {
                 Optional.of(Constants.ANY_ROLE));
 
         ExecutorEvaluationStage executorEvaluationStage =
-                new ExecutorEvaluationStage(Optional.of(taskInfo.getExecutor().getExecutorId()));
+                new ExecutorEvaluationStage(TestConstants.SERVICE_NAME, Optional.of(taskInfo.getExecutor().getExecutorId()));
         EvaluationOutcome outcome =
                 executorEvaluationStage.evaluate(
                         resources,
@@ -88,7 +88,7 @@ public class ExecutorEvaluationStageTest extends OfferEvaluatorTestBase {
                 Optional.of(Constants.ANY_ROLE));
 
         ExecutorEvaluationStage executorEvaluationStage =
-                new ExecutorEvaluationStage(Optional.of(taskInfo.getExecutor().getExecutorId()));
+                new ExecutorEvaluationStage(TestConstants.SERVICE_NAME, Optional.of(taskInfo.getExecutor().getExecutorId()));
         EvaluationOutcome outcome =
                 executorEvaluationStage.evaluate(
                         resources,
@@ -132,7 +132,7 @@ public class ExecutorEvaluationStageTest extends OfferEvaluatorTestBase {
         MesosResourcePool resources = new MesosResourcePool(offer, Optional.of(Constants.ANY_ROLE));
 
         ExecutorEvaluationStage executorEvaluationStage =
-                new ExecutorEvaluationStage(Optional.of(taskInfo.getExecutor().getExecutorId()));
+                new ExecutorEvaluationStage(TestConstants.SERVICE_NAME, Optional.of(taskInfo.getExecutor().getExecutorId()));
         PodInfoBuilder podInfoBuilder =
                 new PodInfoBuilder(
                         podInstanceRequirement,
@@ -180,7 +180,7 @@ public class ExecutorEvaluationStageTest extends OfferEvaluatorTestBase {
         MesosResourcePool resources = new MesosResourcePool(offer, Optional.of(Constants.ANY_ROLE));
 
         ExecutorEvaluationStage executorEvaluationStage =
-                new ExecutorEvaluationStage(Optional.of(taskInfo.getExecutor().getExecutorId()));
+                new ExecutorEvaluationStage(TestConstants.SERVICE_NAME, Optional.of(taskInfo.getExecutor().getExecutorId()));
         PodInfoBuilder podInfoBuilder =
                 new PodInfoBuilder(
                         podInstanceRequirement,

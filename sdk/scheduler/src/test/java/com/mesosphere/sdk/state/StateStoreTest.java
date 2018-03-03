@@ -23,7 +23,7 @@ import static org.junit.Assert.*;
 public class StateStoreTest {
     private static final Protos.TaskState TASK_STATE = Protos.TaskState.TASK_STAGING;
     private static final Protos.TaskStatus TASK_STATUS = Protos.TaskStatus.newBuilder()
-            .setTaskId(CommonIdUtils.toTaskId(TestConstants.TASK_NAME))
+            .setTaskId(TestConstants.TASK_ID)
             .setState(TASK_STATE)
             .build();
     private static final String NAMESPACE = "test-namespace";
@@ -485,7 +485,8 @@ public class StateStoreTest {
 
     @Test
     public void testMismatchedTaskIds() {
-        Protos.TaskID taskID = CommonIdUtils.toTaskId(TestConstants.TASK_NAME);
+        // Generate a different UUID:
+        Protos.TaskID taskID = CommonIdUtils.toTaskId(TestConstants.SERVICE_NAME, TestConstants.TASK_NAME);
         Protos.TaskInfo taskInfo = Protos.TaskInfo.newBuilder(TestConstants.TASK_INFO)
                 .setTaskId(taskID)
                 .build();

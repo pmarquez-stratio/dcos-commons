@@ -34,7 +34,6 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.*;
 
 public class PodQueriesTest {
@@ -70,30 +69,30 @@ public class PodQueriesTest {
                 .setType("test")
                 .setIndex(0)
                 .toProto());
-        POD_0_TASK_A = infoBuilder.setName("test-0-a").setTaskId(CommonIdUtils.toTaskId("a")).build();
+        POD_0_TASK_A = infoBuilder.setName("test-0-a").setTaskId(CommonIdUtils.toTaskId(TestConstants.SERVICE_NAME, "a")).build();
         POD_0_STATUS_A = TaskTestUtils.generateStatus(POD_0_TASK_A.getTaskId(), TaskState.TASK_RUNNING);
 
-        POD_0_TASK_B = POD_0_TASK_A.toBuilder().setName("test-0-b").setTaskId(CommonIdUtils.toTaskId("b")).build();
+        POD_0_TASK_B = POD_0_TASK_A.toBuilder().setName("test-0-b").setTaskId(CommonIdUtils.toTaskId(TestConstants.SERVICE_NAME, "b")).build();
         POD_0_STATUS_B = TaskTestUtils.generateStatus(POD_0_TASK_B.getTaskId(), TaskState.TASK_STAGING);
 
-        POD_0_TASK_C = POD_0_TASK_A.toBuilder().setName("test-0-c").setTaskId(CommonIdUtils.toTaskId("c")).build();
+        POD_0_TASK_C = POD_0_TASK_A.toBuilder().setName("test-0-c").setTaskId(CommonIdUtils.toTaskId(TestConstants.SERVICE_NAME, "c")).build();
         POD_0_STATUS_C = TaskTestUtils.generateStatus(POD_0_TASK_C.getTaskId(), TaskState.TASK_RUNNING);
 
-        POD_0_TASK_D = POD_0_TASK_A.toBuilder().setName("test-0-d").setTaskId(CommonIdUtils.toTaskId("d")).build();
+        POD_0_TASK_D = POD_0_TASK_A.toBuilder().setName("test-0-d").setTaskId(CommonIdUtils.toTaskId(TestConstants.SERVICE_NAME, "d")).build();
 
         // pod 1
         infoBuilder = POD_0_TASK_A.toBuilder();
         infoBuilder.setLabels(new TaskLabelWriter(infoBuilder).setIndex(1).toProto());
-        POD_1_TASK_A = infoBuilder.setName("test-1-a").setTaskId(CommonIdUtils.toTaskId("a")).build();
+        POD_1_TASK_A = infoBuilder.setName("test-1-a").setTaskId(CommonIdUtils.toTaskId(TestConstants.SERVICE_NAME, "a")).build();
         POD_1_STATUS_A = TaskTestUtils.generateStatus(POD_1_TASK_A.getTaskId(), TaskState.TASK_FINISHED);
 
-        POD_1_TASK_B = POD_1_TASK_A.toBuilder().setName("test-1-b").setTaskId(CommonIdUtils.toTaskId("b")).build();
+        POD_1_TASK_B = POD_1_TASK_A.toBuilder().setName("test-1-b").setTaskId(CommonIdUtils.toTaskId(TestConstants.SERVICE_NAME, "b")).build();
         POD_1_STATUS_B = TaskTestUtils.generateStatus(POD_1_TASK_B.getTaskId(), TaskState.TASK_RUNNING);
 
         // pod 2
         infoBuilder = POD_0_TASK_A.toBuilder();
         infoBuilder.setLabels(new TaskLabelWriter(infoBuilder).setIndex(2).toProto());
-        POD_2_TASK_A = infoBuilder.setName("test-2-a").setTaskId(CommonIdUtils.toTaskId("a")).build();
+        POD_2_TASK_A = infoBuilder.setName("test-2-a").setTaskId(CommonIdUtils.toTaskId(TestConstants.SERVICE_NAME, "a")).build();
         POD_2_STATUS_A = TaskTestUtils.generateStatus(POD_2_TASK_A.getTaskId(), TaskState.TASK_FINISHED);
     }
     private static final Collection<TaskInfo> TASK_INFOS = Arrays.asList(
@@ -151,7 +150,7 @@ public class PodQueriesTest {
     }
 
     @Test
-    public void testGetAllPodStatuses() {
+    public void testGetAllPodStatuses() throws Exception {
         when(mockStateStore.fetchTasks()).thenReturn(TASK_INFOS);
         when(mockStateStore.fetchStatuses()).thenReturn(TASK_STATUSES);
         when(mockStateStore.fetchGoalOverrideStatus(TestConstants.TASK_NAME)).thenReturn(GoalStateOverride.Status.INACTIVE);
@@ -192,25 +191,33 @@ public class PodQueriesTest {
         JSONObject task = tasks.getJSONObject(0);
         assertEquals(3, task.length());
         assertEquals("test-0-a", task.getString("name"));
-        assertTrue(task.getString("id").startsWith("a__"));
+        Protos.TaskID taskId = Protos.TaskID.newBuilder().setValue(task.getString("id")).build();
+        assertEquals(TestConstants.SERVICE_NAME, CommonIdUtils.toServiceName(taskId).get());
+        assertEquals("a", CommonIdUtils.toTaskName(taskId));
         assertEquals("RUNNING", task.getString("status"));
 
         task = tasks.getJSONObject(1);
         assertEquals(3, task.length());
         assertEquals("test-0-b", task.getString("name"));
-        assertTrue(task.getString("id").startsWith("b__"));
+        taskId = Protos.TaskID.newBuilder().setValue(task.getString("id")).build();
+        assertEquals(TestConstants.SERVICE_NAME, CommonIdUtils.toServiceName(taskId).get());
+        assertEquals("b", CommonIdUtils.toTaskName(taskId));
         assertEquals("STARTING", task.getString("status"));
 
         task = tasks.getJSONObject(2);
         assertEquals(3, task.length());
         assertEquals("test-0-c", task.getString("name"));
-        assertTrue(task.getString("id").startsWith("c__"));
+        taskId = Protos.TaskID.newBuilder().setValue(task.getString("id")).build();
+        assertEquals(TestConstants.SERVICE_NAME, CommonIdUtils.toServiceName(taskId).get());
+        assertEquals("c", CommonIdUtils.toTaskName(taskId));
         assertEquals("PAUSING", task.getString("status"));
 
         task = tasks.getJSONObject(3);
         assertEquals(2, task.length());
         assertEquals("test-0-d", task.getString("name"));
-        assertTrue(task.getString("id").startsWith("d__"));
+        taskId = Protos.TaskID.newBuilder().setValue(task.getString("id")).build();
+        assertEquals(TestConstants.SERVICE_NAME, CommonIdUtils.toServiceName(taskId).get());
+        assertEquals("d", CommonIdUtils.toTaskName(taskId));
 
         podInstance = instances.getJSONObject(1);
         assertEquals(2, podInstance.length());
@@ -220,13 +227,17 @@ public class PodQueriesTest {
         task = tasks.getJSONObject(0);
         assertEquals(3, task.length());
         assertEquals("test-1-a", task.getString("name"));
-        assertTrue(task.getString("id").startsWith("a__"));
+        taskId = Protos.TaskID.newBuilder().setValue(task.getString("id")).build();
+        assertEquals(TestConstants.SERVICE_NAME, CommonIdUtils.toServiceName(taskId).get());
+        assertEquals("a", CommonIdUtils.toTaskName(taskId));
         assertEquals("FINISHED", task.getString("status"));
 
         task = tasks.getJSONObject(1);
         assertEquals(3, task.length());
         assertEquals("test-1-b", task.getString("name"));
-        assertTrue(task.getString("id").startsWith("b__"));
+        taskId = Protos.TaskID.newBuilder().setValue(task.getString("id")).build();
+        assertEquals(TestConstants.SERVICE_NAME, CommonIdUtils.toServiceName(taskId).get());
+        assertEquals("b", CommonIdUtils.toTaskName(taskId));
         assertEquals("STARTING", task.getString("status"));
 
         podInstance = instances.getJSONObject(2);
@@ -237,7 +248,9 @@ public class PodQueriesTest {
         task = tasks.getJSONObject(0);
         assertEquals(3, task.length());
         assertEquals("test-2-a", task.getString("name"));
-        assertTrue(task.getString("id").startsWith("a__"));
+        taskId = Protos.TaskID.newBuilder().setValue(task.getString("id")).build();
+        assertEquals(TestConstants.SERVICE_NAME, CommonIdUtils.toServiceName(taskId).get());
+        assertEquals("a", CommonIdUtils.toTaskName(taskId));
         assertEquals("FINISHED", task.getString("status"));
 
         pod = pods.getJSONObject(1);
@@ -253,12 +266,14 @@ public class PodQueriesTest {
         task = tasks.getJSONObject(0);
         assertEquals(3, task.length());
         assertEquals("test-task-name", task.getString("name"));
-        assertTrue(task.getString("id").startsWith("test-task-name__"));
+        taskId = Protos.TaskID.newBuilder().setValue(task.getString("id")).build();
+        assertEquals(TestConstants.SERVICE_NAME, CommonIdUtils.toServiceName(taskId).get());
+        assertEquals("test-task-name", CommonIdUtils.toTaskName(taskId));
         assertEquals("PAUSED", task.getString("status"));
     }
 
     @Test
-    public void testGetPodStatus() {
+    public void testGetPodStatus() throws Exception {
         when(mockStateStore.fetchTasks()).thenReturn(TASK_INFOS);
         when(mockStateStore.fetchStatuses()).thenReturn(TASK_STATUSES);
         when(mockStateStore.fetchGoalOverrideStatus("test-1-a")).thenReturn(GoalStateOverride.Status.INACTIVE);
@@ -277,13 +292,17 @@ public class PodQueriesTest {
         JSONObject task = tasks.getJSONObject(0);
         assertEquals(3, task.length());
         assertEquals("test-1-a", task.getString("name"));
-        assertTrue(task.getString("id").startsWith("a__"));
+        Protos.TaskID taskId = Protos.TaskID.newBuilder().setValue(task.getString("id")).build();
+        assertEquals(TestConstants.SERVICE_NAME, CommonIdUtils.toServiceName(taskId).get());
+        assertEquals("a", CommonIdUtils.toTaskName(taskId));
         assertEquals("FINISHED", task.getString("status"));
 
         task = tasks.getJSONObject(1);
         assertEquals(3, task.length());
         assertEquals("test-1-b", task.getString("name"));
-        assertTrue(task.getString("id").startsWith("b__"));
+        taskId = Protos.TaskID.newBuilder().setValue(task.getString("id")).build();
+        assertEquals(TestConstants.SERVICE_NAME, CommonIdUtils.toServiceName(taskId).get());
+        assertEquals("b", CommonIdUtils.toTaskName(taskId));
         assertEquals("PAUSING", task.getString("status"));
     }
 

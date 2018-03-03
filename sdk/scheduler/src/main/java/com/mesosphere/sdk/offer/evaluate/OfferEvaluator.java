@@ -199,7 +199,7 @@ public class OfferEvaluator {
 
         List<OfferEvaluationStage> evaluationPipeline = new ArrayList<>();
         if (shouldGetNewRequirement) {
-            evaluationPipeline.add(new ExecutorEvaluationStage(Optional.empty()));
+            evaluationPipeline.add(new ExecutorEvaluationStage(serviceName, Optional.empty()));
             evaluationPipeline.addAll(getNewEvaluationPipeline(podInstanceRequirement, allTasks, tlsStageBuilder));
         } else {
             Protos.ExecutorInfo executorInfo = getExecutorInfo(podInstanceRequirement, thisPodTasks.values());
@@ -211,7 +211,7 @@ public class OfferEvaluator {
                     Optional.empty() :
                     Optional.of(executorInfo.getExecutorId());
 
-            evaluationPipeline.add(new ExecutorEvaluationStage(executorID));
+            evaluationPipeline.add(new ExecutorEvaluationStage(serviceName, executorID));
             evaluationPipeline.addAll(getExistingEvaluationPipeline(
                     podInstanceRequirement, thisPodTasks, allTasks, executorInfo, tlsStageBuilder));
         }
@@ -380,7 +380,8 @@ public class OfferEvaluator {
             }
 
             boolean shouldBeLaunched = podInstanceRequirement.getTasksToLaunch().contains(taskName);
-            evaluationStages.add(new LaunchEvaluationStage(taskName, shouldBeLaunched, useDefaultExecutor));
+            evaluationStages.add(
+                    new LaunchEvaluationStage(serviceName, taskName, shouldBeLaunched, useDefaultExecutor));
         }
 
         return evaluationStages;
@@ -481,7 +482,8 @@ public class OfferEvaluator {
             evaluationStages.addAll(taskResourceMapper.getEvaluationStages());
 
             boolean shouldLaunch = podInstanceRequirement.getTasksToLaunch().contains(taskSpec.getName());
-            evaluationStages.add(new LaunchEvaluationStage(taskSpec.getName(), shouldLaunch, useDefaultExecutor));
+            evaluationStages.add(
+                    new LaunchEvaluationStage(serviceName, taskSpec.getName(), shouldLaunch, useDefaultExecutor));
         }
 
         return evaluationStages;
