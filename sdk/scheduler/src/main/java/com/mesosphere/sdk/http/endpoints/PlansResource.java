@@ -99,9 +99,9 @@ public class PlansResource extends PrettyJsonResource {
     @Path("{planName}/forceComplete")
     public Response forceComplete(
             @PathParam("planName") String planName,
-            @QueryParam("phase") String phase,
-            @QueryParam("step") String step) {
-        return PlansQueries.forceComplete(planManagers, planName, phase, step);
+            @QueryParam("phase") String phaseName,
+            @QueryParam("step") String stepName) {
+        return PlansQueries.forceComplete(planManagers, planName, phaseName, stepName);
     }
 
     /**
@@ -111,8 +111,8 @@ public class PlansResource extends PrettyJsonResource {
     @Path("{planName}/restart")
     public Response restart(
             @PathParam("planName") String planName,
-            @QueryParam("phase") String phase,
-            @QueryParam("step") String step) {
-        return PlansQueries.restart(planManagers, planName, phase, step);
+            @QueryParam("phase") String phaseName,
+            @QueryParam("step") String stepName) {
+        return PlansQueries.restart(planManagers, planName, phaseName, stepName);
     }
 }

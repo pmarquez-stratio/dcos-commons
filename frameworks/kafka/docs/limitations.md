@@ -15,6 +15,11 @@ The "disk" configuration value is denominated in MB. We recommend you set the co
 
 ## Security
 
+### Kafka CLI
+
+When any security functions are enabled, the Kafka service CLI sub-command `topic` will not function. While the service CLI convenience functions will not work, the tooling bundled with [Apache Kafka](https://cwiki.apache.org/confluence/display/KAFKA/System+Tools) and other tools that support the enabled security modes will of course work.
+
+
 ### Kerberos
 
 When Kerberos is enabled, the broker VIP is disabled as Kerberized clients will not be able to use it. This is because each Kafka broker uses a specific Kerberos principal and cannot accept connections from a single unified principal which the VIP would require.
@@ -23,7 +28,7 @@ When Kerberos is enabled, the broker VIP is disabled as Kerberized clients will 
 
 Kerberos authentication can be toggled (enabled / disabled), but this triggers a rolling restart of the cluster. Clients configured with the old security settings will lose connectivity during and after this process. It is recommended that backups are made and downtime is scheduled.
 
-### Toggling TLS
+### Toggling Transport Encryption
 
 Transport encryption using TLS can be toggled (enabled / disabled), but will trigger a rolling restart of the cluster. As each broker restarts, a client may lose connectivity based on its security settings and the value of the `service.security.transport_encryption.allow_plaintext` configuration option. It is recommended that backups are made and downtime is scheduled.
 

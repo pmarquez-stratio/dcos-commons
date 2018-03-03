@@ -263,6 +263,36 @@ public class PlansQueriesTest {
     }
 
     @Test
+    public void testForceCompletePlan() {
+        Response response = PlansQueries.forceComplete(planManagers, planName, null, null);
+        validateCommandResult(response, "forceComplete");
+    }
+
+    @Test
+    public void testForceCompletePhase() {
+        Response response = PlansQueries.forceComplete(planManagers, planName, phaseName, null);
+        validateCommandResult(response, "forceComplete");
+    }
+
+    @Test
+    public void testFailForceCompletePlanAndStep() {
+        Response response = PlansQueries.forceComplete(planManagers, planName, null, stepName);
+        assertEquals(400, response.getStatus());
+    }
+
+    @Test
+    public void testFailForceCompleteStep() {
+        Response response = PlansQueries.forceComplete(planManagers, null, null, stepName);
+        assertEquals(404, response.getStatus());
+    }
+
+    @Test
+    public void testFailForceCompleteNothing() {
+        Response response = PlansQueries.forceComplete(planManagers, null, null, null);
+        assertEquals(404, response.getStatus());
+    }
+
+    @Test
     public void testRestart() {
         Response response = PlansQueries.restart(planManagers, planName, phaseId.toString(), stepId.toString());
         validateCommandResult(response, "restart");
@@ -364,6 +394,8 @@ public class PlansQueriesTest {
     }
 
     private static void validateCommandResult(Response response, String commandName) {
-        assertEquals("{\"message\": \"Received cmd: " + commandName + "\"}", response.getEntity().toString());
+        String expectedPrefix = String.format("{\"message\": \"Received cmd: %s", commandName);
+        assertTrue(response.getEntity().toString().startsWith(expectedPrefix));
+        assertEquals(200, response.getStatus());
     }
 }

@@ -4,11 +4,11 @@ import com.mesosphere.sdk.config.validate.ConfigValidator;
 import com.mesosphere.sdk.dcos.Capabilities;
 import com.mesosphere.sdk.offer.LoggingUtils;
 import com.mesosphere.sdk.offer.evaluate.PodInfoBuilder;
-import com.mesosphere.sdk.scheduler.ServiceScheduler;
-import com.mesosphere.sdk.scheduler.TaskKiller;
 import com.mesosphere.sdk.scheduler.DefaultScheduler;
 import com.mesosphere.sdk.scheduler.FrameworkScheduler;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
+import com.mesosphere.sdk.scheduler.ServiceScheduler;
+import com.mesosphere.sdk.scheduler.TaskKiller;
 import com.mesosphere.sdk.scheduler.plan.DefaultPodInstance;
 import com.mesosphere.sdk.scheduler.recovery.RecoveryPlanOverriderFactory;
 import com.mesosphere.sdk.specification.*;
@@ -360,7 +360,7 @@ public class ServiceTestRunner {
         Capabilities.overrideCapabilities(null);
 
         // Re-enable background TaskKiller thread for other tests
-        TaskKiller.reset(false);
+        TaskKiller.reset(true);
 
         return new ServiceTestResult(
                 serviceSpec, rawServiceSpec, schedulerEnvironment, taskConfigs, persister, clusterState);
