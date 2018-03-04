@@ -96,15 +96,27 @@ public class SerializationUtils {
     }
 
     /**
-     * Returns a JSON representation of the provided value.
+     * Returns a pretty-printed JSON representation of the provided value.
      *
      * @param value The value that will be converted to JSON
      * @param <T> The type of the {@code value}
-     * @return A JSON representation of the {@code value}
+     * @return A pretty-printed JSON representation of the {@code value}
      * @throws IOException if conversion fails
      */
     public static <T> String toJsonString(T value) throws IOException {
         return toString(value, DEFAULT_JSON_MAPPER);
+    }
+
+    /**
+     * Returns a short JSON representation of the provided value.
+     *
+     * @param value The value that will be converted to JSON
+     * @param <T> The type of the {@code value}
+     * @return A short JSON representation of the {@code value}
+     * @throws IOException if conversion fails
+     */
+    public static <T> String toShortJsonString(T value) throws IOException {
+        return toShortString(value, DEFAULT_JSON_MAPPER);
     }
 
     /**
@@ -132,10 +144,17 @@ public class SerializationUtils {
     }
 
     /**
-     * Returns a representation of the provided value using the provided custom object mapper.
+     * Returns a pretty-printed representation of the provided value using the provided custom object mapper.
      */
     public static <T> String toString(T value, ObjectMapper mapper) throws IOException {
         return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(value);
+    }
+
+    /**
+     * Returns a shorter representation of the provided value using the provided custom object mapper.
+     */
+    public static <T> String toShortString(T value, ObjectMapper mapper) throws IOException {
+        return mapper.writer().writeValueAsString(value);
     }
 
     /**

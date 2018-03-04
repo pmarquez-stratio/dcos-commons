@@ -367,6 +367,7 @@ public class SchedulerBuilder {
             return Optional.of(
                     new DecommissionPlanManager(
                             decommissionPlan.get(),
+                            decommissionPlanFactory.getResourceSteps(),
                             decommissionPlanFactory.getTasksToDecommission()));
         }
 

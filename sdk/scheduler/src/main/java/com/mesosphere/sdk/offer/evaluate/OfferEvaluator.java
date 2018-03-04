@@ -78,6 +78,7 @@ public class OfferEvaluator {
             Protos.Offer offer = offers.get(i);
 
             MesosResourcePool resourcePool = new MesosResourcePool(
+                    serviceName,
                     offer,
                     OfferEvaluationUtils.getRole(podInstanceRequirement.getPodInstance().getPod()));
 
@@ -331,7 +332,7 @@ public class OfferEvaluator {
         }
 
         for (VolumeSpec volumeSpec : podInstanceRequirement.getPodInstance().getPod().getVolumes()) {
-            evaluationStages.add(VolumeEvaluationStage.getNew(volumeSpec, null, useDefaultExecutor));
+            evaluationStages.add(VolumeEvaluationStage.getNew(serviceName, volumeSpec, null, useDefaultExecutor));
         }
 
         String preReservedRole = null;
@@ -344,12 +345,14 @@ public class OfferEvaluator {
 
             for (ResourceSpec resourceSpec : resourceSpecs) {
                 if (resourceSpec instanceof NamedVIPSpec) {
-                    evaluationStages.add(
-                            new NamedVIPEvaluationStage((NamedVIPSpec) resourceSpec, taskName, Optional.empty()));
+                    evaluationStages.add(new NamedVIPEvaluationStage(
+                            serviceName, (NamedVIPSpec) resourceSpec, taskName, Optional.empty()));
                 } else if (resourceSpec instanceof PortSpec) {
-                    evaluationStages.add(new PortEvaluationStage((PortSpec) resourceSpec, taskName, Optional.empty()));
+                    evaluationStages.add(new PortEvaluationStage(
+                            serviceName, (PortSpec) resourceSpec, taskName, Optional.empty()));
                 } else {
-                    evaluationStages.add(new ResourceEvaluationStage(resourceSpec, Optional.empty(), taskName));
+                    evaluationStages.add(new ResourceEvaluationStage(
+                            serviceName, resourceSpec, taskName, Optional.empty()));
                 }
 
                 if (preReservedRole == null && role == null && principal == null) {
@@ -360,13 +363,15 @@ public class OfferEvaluator {
             }
 
             for (VolumeSpec volumeSpec : entry.getValue().getVolumes()) {
-                evaluationStages.add(VolumeEvaluationStage.getNew(volumeSpec, taskName, useDefaultExecutor));
+                evaluationStages.add(
+                        VolumeEvaluationStage.getNew(serviceName, volumeSpec, taskName, useDefaultExecutor));
             }
 
             if (shouldAddExecutorResources) {
                 // The default executor needs a constant amount of resources, account for them here.
                 for (ResourceSpec resourceSpec : getExecutorResources(preReservedRole, role, principal)) {
-                    evaluationStages.add(new ResourceEvaluationStage(resourceSpec, Optional.empty(), null));
+                    evaluationStages.add(
+                            new ResourceEvaluationStage(serviceName, resourceSpec, null, Optional.empty()));
                 }
                 shouldAddExecutorResources = false;
             }
@@ -456,6 +461,7 @@ public class OfferEvaluator {
         String principal = firstResource.getPrincipal();
 
         ExecutorResourceMapper executorResourceMapper = new ExecutorResourceMapper(
+                serviceName,
                 podInstanceRequirement.getPodInstance().getPod(),
                 getExecutorResources(preReservedRole, role, principal),
                 executorInfo.getResourcesList(),
@@ -476,7 +482,8 @@ public class OfferEvaluator {
                 return Collections.emptyList();
             }
 
-            TaskResourceMapper taskResourceMapper = new TaskResourceMapper(taskSpec, taskInfo, useDefaultExecutor);
+            TaskResourceMapper taskResourceMapper =
+                    new TaskResourceMapper(serviceName, taskSpec, taskInfo, useDefaultExecutor);
             taskResourceMapper.getOrphanedResources()
                     .forEach(resource -> evaluationStages.add(new UnreserveEvaluationStage(resource)));
             evaluationStages.addAll(taskResourceMapper.getEvaluationStages());

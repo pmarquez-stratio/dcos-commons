@@ -9,6 +9,7 @@ import com.mesosphere.sdk.http.endpoints.PlansResource;
 import com.mesosphere.sdk.http.types.PlanInfo;
 import com.mesosphere.sdk.offer.*;
 import com.mesosphere.sdk.scheduler.ServiceScheduler;
+import com.mesosphere.sdk.scheduler.OfferResources;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.scheduler.plan.*;
 import com.mesosphere.sdk.specification.ServiceSpec;
@@ -35,7 +36,7 @@ public class UninstallScheduler extends ServiceScheduler {
 
     private final Logger logger;
     private final ConfigStore<ServiceSpec> configStore;
-    private final OperationRecorder recorder;
+    private final UninstallRecorder recorder;
 
     private PlanManager uninstallPlanManager;
     private Collection<Object> resources = Collections.emptyList();
@@ -84,7 +85,7 @@ public class UninstallScheduler extends ServiceScheduler {
                     customSecretsClientForTests)
                     .build();
         }
-        this.recorder = new UninstallRecorder(stateStore, deployPlan.getChildren().stream()
+        this.recorder = new UninstallRecorder(serviceSpec.getName(), stateStore, deployPlan.getChildren().stream()
                 .flatMap(phase -> phase.getChildren().stream())
                 .filter(step -> step instanceof ResourceCleanupStep)
                 .map(step -> (ResourceCleanupStep) step)
@@ -158,20 +159,26 @@ public class UninstallScheduler extends ServiceScheduler {
         return Collections.emptyList();
     }
 
+    /**
+     * Returns the resources which are not expected by this service. When uninstalling, all resources are unexpected.
+     * The {@link UninstallScheduler} just keeps track of them on its 'checklist' as they are removed.
+     */
     @Override
-    public Collection<Protos.Resource> getExpectedResources() {
-        // We don't have any expected resources. We want everything to be uninstalled.
-        return Collections.emptyList();
-    }
-
-    @Override
-    public void cleaned(Collection<OfferRecommendation> recommendations) {
+    public UnexpectedResourcesResponse getUnexpectedResources(List<Protos.Offer> unusedOffers) {
+        Collection<OfferResources> unexpected = unusedOffers.stream()
+                .map(offer -> new OfferResources(offer).addAll(offer.getResourcesList().stream()
+                        // Omit unreserved resources:
+                        .filter(resource -> ResourceUtils.getReservation(resource).isPresent())
+                        .collect(Collectors.toList())))
+                .collect(Collectors.toList());
         try {
-            // Mark any unreserved resources relevant to this service as no longer waiting for cleanup:
-            recorder.record(recommendations);
-        } catch (Exception ex) {
-            // TODO(nickbp): This doesn't undo the operation, so things could be left in a bad state.
-            logger.error("Failed to record cleanup operations", ex);
+            recorder.recordResources(unexpected);
+            return UnexpectedResourcesResponse.processed(unexpected);
+        } catch (Exception e) {
+            // Failed to record the upcoming dereservation. Don't return the resources as unexpected until we can record
+            // the dereservation.
+            logger.error("Failed to record unexpected resources", e);
+            return UnexpectedResourcesResponse.failed(Collections.emptyList());
         }
     }
 
@@ -190,10 +197,8 @@ public class UninstallScheduler extends ServiceScheduler {
         // mode if schedulerConfig.isUninstallEnabled() == true. Therefore we can use it as an OR along with
         // StateStoreUtils.isUninstalling().
 
-        // resources are destroyed and unreserved, framework ID is gone, but tasks still need to be cleared
+        // Framework ID is gone, all resources are unreserved/destroyed, but the empty task entries remain to be removed
         return !frameworkStore.fetchFrameworkId().isPresent() &&
-                ResourceUtils.getResourceIds(
-                        ResourceUtils.getAllResources(stateStore.fetchTasks())).stream()
-                        .allMatch(resourceId -> resourceId.startsWith(Constants.TOMBSTONE_MARKER));
+                ResourceUtils.getAllResources(stateStore.fetchTasks()).isEmpty();
     }
 }

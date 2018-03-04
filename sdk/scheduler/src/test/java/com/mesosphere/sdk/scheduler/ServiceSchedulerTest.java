@@ -10,12 +10,11 @@ import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.apache.mesos.Protos;
-import org.apache.mesos.Protos.Resource;
+import org.apache.mesos.Protos.Offer;
 import org.apache.mesos.SchedulerDriver;
 
 import com.mesosphere.sdk.dcos.clients.SecretsClient;
 import com.mesosphere.sdk.offer.OfferRecommendation;
-import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
 import com.mesosphere.sdk.scheduler.plan.PlanCoordinator;
 import com.mesosphere.sdk.scheduler.plan.Step;
 import com.mesosphere.sdk.specification.ServiceSpec;
@@ -61,14 +60,14 @@ public class ServiceSchedulerTest {
         ServiceScheduler scheduler = getScheduler();
 
         // Not reconciled yet:
-        Assert.assertEquals(OfferResponse.Result.NOT_READY,
+        Assert.assertEquals(MesosEventClient.Result.FAILED,
                 scheduler.offers(Arrays.asList(getOffer(), getOffer(), getOffer())).result);
 
         // Get the task marked reconciled:
         scheduler.status(TestConstants.TASK_STATUS);
 
         // Ready to go:
-        Assert.assertEquals(OfferResponse.Result.PROCESSED,
+        Assert.assertEquals(MesosEventClient.Result.PROCESSED,
                 scheduler.offers(Arrays.asList(getOffer(), getOffer(), getOffer())).result);
     }
 
@@ -133,13 +132,8 @@ public class ServiceSchedulerTest {
         }
 
         @Override
-        public Collection<Resource> getExpectedResources() {
-            return Collections.emptyList();
-        }
-
-        @Override
-        public void cleaned(Collection<OfferRecommendation> recommendations) {
-            // No-op
+        public UnexpectedResourcesResponse getUnexpectedResources(List<Offer> unusedOffers) {
+            return UnexpectedResourcesResponse.processed(Collections.emptyList());
         }
     }
 }

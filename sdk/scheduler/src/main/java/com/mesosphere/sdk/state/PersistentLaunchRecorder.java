@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 /**
  * Records the result of launched tasks to persistent storage.
  */
-public class PersistentLaunchRecorder implements OperationRecorder {
+public class PersistentLaunchRecorder {
     private final Logger logger;
     private final StateStore stateStore;
     private final ServiceSpec serviceSpec;
@@ -25,7 +25,6 @@ public class PersistentLaunchRecorder implements OperationRecorder {
         this.serviceSpec = serviceSpec;
     }
 
-    @Override
     public void record(Collection<OfferRecommendation> offerRecommendations) throws Exception {
         for (OfferRecommendation offerRecommendation : offerRecommendations) {
             if (!(offerRecommendation instanceof LaunchOfferRecommendation)) {

@@ -46,7 +46,7 @@ public class LaunchEvaluationStageTest extends DefaultCapabilitiesTestSuite {
     @Test
     public void isPassing() {
         EvaluationOutcome outcome = stage.evaluate(
-                new MesosResourcePool(offer, Optional.of(Constants.ANY_ROLE)),
+                new MesosResourcePool(TestConstants.SERVICE_NAME, offer, Optional.of(Constants.ANY_ROLE)),
                 podInfoBuilder);
         Assert.assertTrue(outcome.isPassing());
     }
@@ -54,7 +54,7 @@ public class LaunchEvaluationStageTest extends DefaultCapabilitiesTestSuite {
     @Test
     public void labelsAreCorrect() {
         stage.evaluate(
-                new MesosResourcePool(offer, Optional.of(Constants.ANY_ROLE)),
+                new MesosResourcePool(TestConstants.SERVICE_NAME, offer, Optional.of(Constants.ANY_ROLE)),
                 podInfoBuilder);
         Protos.TaskInfo.Builder taskBuilder = podInfoBuilder.getTaskBuilder(TestConstants.TASK_NAME);
 
@@ -90,7 +90,7 @@ public class LaunchEvaluationStageTest extends DefaultCapabilitiesTestSuite {
                 .setDomain(TestConstants.LOCAL_DOMAIN_INFO)
                 .build();
         stage.evaluate(
-                new MesosResourcePool(offer, Optional.of(Constants.ANY_ROLE)),
+                new MesosResourcePool(TestConstants.SERVICE_NAME, offer, Optional.of(Constants.ANY_ROLE)),
                 podInfoBuilder);
         Protos.TaskInfo.Builder taskBuilder = podInfoBuilder.getTaskBuilder(TestConstants.TASK_NAME);
 
@@ -102,7 +102,7 @@ public class LaunchEvaluationStageTest extends DefaultCapabilitiesTestSuite {
     @Test
     public void regionAndZoneNotInjected() {
         stage.evaluate(
-                new MesosResourcePool(offer, Optional.of(Constants.ANY_ROLE)),
+                new MesosResourcePool(TestConstants.SERVICE_NAME, offer, Optional.of(Constants.ANY_ROLE)),
                 podInfoBuilder);
         Protos.TaskInfo.Builder taskBuilder = podInfoBuilder.getTaskBuilder(TestConstants.TASK_NAME);
 

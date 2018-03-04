@@ -98,7 +98,7 @@ public class DefaultRecoveryPlanManager implements PlanManager {
                     .map(step -> step.getName())
                     .collect(Collectors.toList());
             try {
-                logger.info("Recovery plan set to: {}", SerializationUtils.toJsonString(PlanInfo.forPlan(plan)));
+                logger.info("Recovery plan set to: {}", SerializationUtils.toShortJsonString(PlanInfo.forPlan(plan)));
             } catch (IOException e) {
                 logger.error("Failed to serialize plan to JSON. Recovery plan set to: {}", stepNames);
             }

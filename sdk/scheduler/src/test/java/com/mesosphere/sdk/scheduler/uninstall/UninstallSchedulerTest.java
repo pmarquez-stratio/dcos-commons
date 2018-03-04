@@ -3,11 +3,10 @@ package com.mesosphere.sdk.scheduler.uninstall;
 import com.mesosphere.sdk.dcos.clients.SecretsClient;
 import com.mesosphere.sdk.offer.CommonIdUtils;
 import com.mesosphere.sdk.offer.Constants;
-import com.mesosphere.sdk.offer.OfferRecommendation;
-import com.mesosphere.sdk.offer.UnreserveOfferRecommendation;
 import com.mesosphere.sdk.offer.taskdata.TaskLabelWriter;
 import com.mesosphere.sdk.scheduler.Driver;
-import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
+import com.mesosphere.sdk.scheduler.MesosEventClient;
+import com.mesosphere.sdk.scheduler.MesosEventClient.UnexpectedResourcesResponse;
 import com.mesosphere.sdk.scheduler.plan.*;
 import com.mesosphere.sdk.specification.*;
 import com.mesosphere.sdk.state.ConfigStore;
@@ -98,7 +97,7 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
     @Test
     public void testEmptyOffers() throws Exception {
         UninstallScheduler uninstallScheduler = getUninstallScheduler();
-        Assert.assertEquals(OfferResponse.Result.PROCESSED, uninstallScheduler.offers(Collections.emptyList()).result);
+        Assert.assertEquals(MesosEventClient.Result.PROCESSED, uninstallScheduler.offers(Collections.emptyList()).result);
         verify(mockSchedulerDriver, times(1)).reconcileTasks(any());
         verify(mockSchedulerDriver, times(0)).acceptOffers(any(), anyCollectionOf(Protos.Offer.Operation.class), any());
         verify(mockSchedulerDriver, times(0)).declineOffer(any(), any());
@@ -170,10 +169,14 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
         PlanCoordinator planCoordinator = uninstallScheduler.getPlanCoordinator();
         uninstallScheduler.offers(Collections.singletonList(offer));
 
-        // Verify that scheduler doesn't expect any resources, then tell it that resource_1/_2 have been cleaned:
-        Assert.assertTrue(uninstallScheduler.getExpectedResources().isEmpty());
-        uninstallScheduler.cleaned(toUninstallRecommendations(offer.getResourcesList()));
+        // Verify that scheduler doesn't expect _1 and _2. It then expects that they have been cleaned:
+        UnexpectedResourcesResponse response =
+                uninstallScheduler.getUnexpectedResources(Collections.singletonList(offer));
+        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
+        Assert.assertEquals(1, response.offerResources.size());
+        Assert.assertEquals(offer.getResourcesList(), response.offerResources.iterator().next().getResources());
 
+        // Check that _1 and _2 are now marked as complete:
         Plan plan = planCoordinator.getPlanManagers().stream().findFirst().get().getPlan();
         List<Status> expected = Arrays.asList(Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.PENDING, Status.PENDING);
         Assert.assertEquals(plan.toString(), expected, getStepStatuses(plan));
@@ -181,9 +184,11 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
         offer = OfferTestUtils.getOffer(Collections.singletonList(RESERVED_RESOURCE_3));
         uninstallScheduler.offers(Collections.singletonList(offer));
 
-        // Verify that scheduler doesn't expect any resources, then tell it that resource_3 has been cleaned:
-        Assert.assertTrue(uninstallScheduler.getExpectedResources().isEmpty());
-        uninstallScheduler.cleaned(toUninstallRecommendations(offer.getResourcesList()));
+        // Verify that scheduler doesn't expect _3. It then expects that it has been cleaned:
+        response = uninstallScheduler.getUnexpectedResources(Collections.singletonList(offer));
+        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
+        Assert.assertEquals(1, response.offerResources.size());
+        Assert.assertEquals(offer.getResourcesList(), response.offerResources.iterator().next().getResources());
 
         expected = Arrays.asList(Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.PENDING);
         Assert.assertEquals(expected, getStepStatuses(plan));
@@ -197,15 +202,18 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
         PlanCoordinator planCoordinator = uninstallScheduler.getPlanCoordinator();
         uninstallScheduler.offers(Collections.singletonList(offer));
 
-        // Verify that scheduler doesn't expect any resources, then tell it that the offered resources have been cleaned:
-        Assert.assertTrue(uninstallScheduler.getExpectedResources().isEmpty());
-        uninstallScheduler.cleaned(toUninstallRecommendations(offer.getResourcesList()));
+        // Verify that scheduler doesn't expect _1/_2/_3. It then expects that they have been cleaned:
+        UnexpectedResourcesResponse response =
+                uninstallScheduler.getUnexpectedResources(Collections.singletonList(offer));
+        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
+        Assert.assertEquals(1, response.offerResources.size());
+        Assert.assertEquals(offer.getResourcesList(), response.offerResources.iterator().next().getResources());
 
         Plan plan = planCoordinator.getPlanManagers().stream().findFirst().get().getPlan();
         List<Status> expected = Arrays.asList(Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.PENDING);
         Assert.assertEquals(plan.toString(), expected, getStepStatuses(plan));
 
-        // Turn the crank once to finish the last Step
+        // Turn the crank once to finish the deregistration Step
         uninstallScheduler.offers(Arrays.asList(getOffer()));
         plan = planCoordinator.getPlanManagers().stream().findFirst().get().getPlan();
         expected = Arrays.asList(Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.COMPLETE);
@@ -255,9 +263,12 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
                 RESERVED_RESOURCE_1, RESERVED_RESOURCE_2, RESERVED_RESOURCE_3));
         uninstallScheduler.offers(Collections.singletonList(offer));
 
-        // Verify that scheduler doesn't expect any resources, then tell it that the offered resources have been cleaned:
-        Assert.assertTrue(uninstallScheduler.getExpectedResources().isEmpty());
-        uninstallScheduler.cleaned(toUninstallRecommendations(offer.getResourcesList()));
+        // Verify that scheduler doesn't expect _1/_2/_3. It then expects that they have been cleaned:
+        UnexpectedResourcesResponse response =
+                uninstallScheduler.getUnexpectedResources(Collections.singletonList(offer));
+        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
+        Assert.assertEquals(1, response.offerResources.size());
+        Assert.assertEquals(offer.getResourcesList(), response.offerResources.iterator().next().getResources());
 
         List<Status> expected = Arrays.asList(
                 Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.PENDING, Status.PENDING);
@@ -360,11 +371,5 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
                 return uninstallPlan;
             }
         });
-    }
-
-    private static Collection<OfferRecommendation> toUninstallRecommendations(List<Protos.Resource> resources) {
-        return resources.stream()
-                .map(res -> new UnreserveOfferRecommendation(null, res))
-                .collect(Collectors.toList());
     }
 }

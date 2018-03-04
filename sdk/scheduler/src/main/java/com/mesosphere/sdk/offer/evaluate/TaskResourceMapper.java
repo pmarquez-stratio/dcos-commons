@@ -2,12 +2,12 @@ package com.mesosphere.sdk.offer.evaluate;
 
 import com.google.protobuf.TextFormat;
 import com.mesosphere.sdk.offer.Constants;
+import com.mesosphere.sdk.offer.LoggingUtils;
 import com.mesosphere.sdk.offer.RangeUtils;
 import com.mesosphere.sdk.offer.ResourceUtils;
 import com.mesosphere.sdk.specification.*;
 import org.apache.mesos.Protos;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -17,16 +17,20 @@ import java.util.stream.Collectors;
  * of expected {@link ResourceSpec}s for that task.
  */
 class TaskResourceMapper {
-    private final Logger logger = LoggerFactory.getLogger(getClass());
+    private final Logger logger;
+    private final String serviceName;
+    private final String taskSpecName;
     private final List<Protos.Resource> orphanedResources = new ArrayList<>();
     private final List<OfferEvaluationStage> evaluationStages;
-    private final String taskSpecName;
     private final Collection<ResourceSpec> resourceSpecs;
     private final TaskPortLookup taskPortFinder;
     private final Collection<Protos.Resource> resources;
     private final boolean useDefaultExecutor;
 
-    public TaskResourceMapper(TaskSpec taskSpec, Protos.TaskInfo taskInfo, boolean useDefaultExecutor) {
+    public TaskResourceMapper(
+            String serviceName, TaskSpec taskSpec, Protos.TaskInfo taskInfo, boolean useDefaultExecutor) {
+        this.logger = LoggingUtils.getLogger(getClass(), serviceName);
+        this.serviceName = serviceName;
         this.taskSpecName = taskSpec.getName();
         this.resourceSpecs = new ArrayList<>();
         this.resourceSpecs.addAll(taskSpec.getResourceSet().getResources());
@@ -213,14 +217,20 @@ class TaskResourceMapper {
             Optional<String> persistenceId,
             Optional<String> sourceRoot) {
         if (resourceSpec instanceof NamedVIPSpec) {
-            return new NamedVIPEvaluationStage((NamedVIPSpec) resourceSpec, taskSpecName, resourceId);
+            return new NamedVIPEvaluationStage(serviceName, (NamedVIPSpec) resourceSpec, taskSpecName, resourceId);
         } else if (resourceSpec instanceof PortSpec) {
-            return new PortEvaluationStage((PortSpec) resourceSpec, taskSpecName, resourceId);
+            return new PortEvaluationStage(serviceName, (PortSpec) resourceSpec, taskSpecName, resourceId);
         } else if (resourceSpec instanceof VolumeSpec) {
             return VolumeEvaluationStage.getExisting(
-                    (VolumeSpec) resourceSpec, taskSpecName, resourceId, persistenceId, sourceRoot, useDefaultExecutor);
+                    serviceName,
+                    (VolumeSpec) resourceSpec,
+                    taskSpecName,
+                    resourceId,
+                    persistenceId,
+                    sourceRoot,
+                    useDefaultExecutor);
         } else {
-            return new ResourceEvaluationStage(resourceSpec, resourceId, taskSpecName);
+            return new ResourceEvaluationStage(serviceName, resourceSpec, taskSpecName, resourceId);
         }
     }
 }

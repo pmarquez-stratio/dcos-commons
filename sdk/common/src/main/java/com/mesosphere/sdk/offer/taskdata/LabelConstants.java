@@ -47,8 +47,10 @@ class LabelConstants {
 
     // ReservationInfo
 
-    /** Label used to uniquely map tasks to reserved resources. */
+    /** Label used to uniquely map resources to tasks. */
     static final String RESOURCE_ID_RESERVATION_LABEL = "resource_id";
+    /** Label used to uniquely map resources to services. */
+    static final String SERVICE_NAME_RESERVATION_LABEL = "service_name";
 
     // ExecutorInfo
 

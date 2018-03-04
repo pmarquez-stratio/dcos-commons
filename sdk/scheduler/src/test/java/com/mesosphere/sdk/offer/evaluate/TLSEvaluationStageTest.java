@@ -110,7 +110,8 @@ public class TLSEvaluationStageTest {
         PodInfoBuilder podInfoBuilder = getPodInfoBuilderForTransportEncryption(transportEncryptionSpecs);
 
         EvaluationOutcome outcome = tlsEvaluationStage.evaluate(
-                new MesosResourcePool(offer, Optional.of(Constants.ANY_ROLE)), podInfoBuilder);
+                new MesosResourcePool(TestConstants.SERVICE_NAME, offer, Optional.of(Constants.ANY_ROLE)),
+                podInfoBuilder);
         Assert.assertTrue(outcome.isPassing());
 
         // Check that TLS update was invoked
@@ -137,7 +138,8 @@ public class TLSEvaluationStageTest {
         PodInfoBuilder podInfoBuilder = getPodInfoBuilderForTransportEncryption(transportEncryptionSpecs);
 
         EvaluationOutcome outcome = tlsEvaluationStage.evaluate(
-                new MesosResourcePool(offer, Optional.of(Constants.ANY_ROLE)), podInfoBuilder);
+                new MesosResourcePool(TestConstants.SERVICE_NAME, offer, Optional.of(Constants.ANY_ROLE)),
+                podInfoBuilder);
         Assert.assertTrue(outcome.isPassing());
 
         // Check that TLS update was invoked
@@ -164,7 +166,8 @@ public class TLSEvaluationStageTest {
         PodInfoBuilder podInfoBuilder = getPodInfoBuilderForTransportEncryption(transportEncryptionSpecs);
 
         EvaluationOutcome outcome = tlsEvaluationStage.evaluate(
-                new MesosResourcePool(offer, Optional.of(Constants.ANY_ROLE)), podInfoBuilder);
+                new MesosResourcePool(TestConstants.SERVICE_NAME, offer, Optional.of(Constants.ANY_ROLE)),
+                podInfoBuilder);
         Assert.assertTrue(outcome.isPassing());
 
         // Check that TLS update was invoked
@@ -194,7 +197,8 @@ public class TLSEvaluationStageTest {
         PodInfoBuilder podInfoBuilder = getPodInfoBuilderForTransportEncryption(transportEncryptionSpecs);
 
         EvaluationOutcome outcome = tlsEvaluationStage.evaluate(
-                new MesosResourcePool(offer, Optional.of(Constants.ANY_ROLE)), podInfoBuilder);
+                new MesosResourcePool(TestConstants.SERVICE_NAME, offer, Optional.of(Constants.ANY_ROLE)),
+                podInfoBuilder);
         Assert.assertFalse(outcome.isPassing());
     }
 

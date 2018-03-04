@@ -14,6 +14,7 @@ import org.apache.mesos.Protos;
 import org.apache.mesos.SchedulerDriver;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -24,6 +25,7 @@ import org.slf4j.LoggerFactory;
 
 import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
+import com.mesosphere.sdk.scheduler.MesosEventClient.UnexpectedResourcesResponse;
 import com.mesosphere.sdk.testutils.TestConstants;
 
 import static org.mockito.Mockito.*;
@@ -72,6 +74,8 @@ public class OfferProcessorTest {
                 return OfferResponse.processed(Collections.emptyList(), getOffersArgument(invocation));
             }
         });
+        when(mockMesosEventClient.getUnexpectedResources(any()))
+                .thenReturn(UnexpectedResourcesResponse.processed(Collections.emptyList()));
 
         processor.setOfferQueueSize(0).start(); // unlimited queue size
 
@@ -89,6 +93,8 @@ public class OfferProcessorTest {
                 return OfferResponse.notReady(getOffersArgument(invocation));
             }
         });
+        when(mockMesosEventClient.getUnexpectedResources(any()))
+                .thenReturn(UnexpectedResourcesResponse.processed(Collections.emptyList()));
 
         processor.setOfferQueueSize(0).start(); // unlimited queue size
 
@@ -97,10 +103,18 @@ public class OfferProcessorTest {
         verify(mockSchedulerDriver, times(sentOfferIds.size())).declineOffer(any(), eq(SHORT_INTERVAL));
     }
 
+    @Ignore("TODO")
+    @Test
+    public void writeUnexpectedResourcesTests() {
+        Assert.fail("TODO tests for getUnexpectedResources");
+    }
+
     @Test
     public void testAsyncOffersLimitedQueueSize() throws InterruptedException {
         when(mockMesosEventClient.offers(any())).thenReturn(
                 OfferResponse.processed(Collections.emptyList(), Collections.emptyList()));
+        when(mockMesosEventClient.getUnexpectedResources(any()))
+                .thenReturn(UnexpectedResourcesResponse.processed(Collections.emptyList()));
         processor.setOfferQueueSize(10).start();
 
         // At least some offers should have been dropped/declined before reaching the client:
@@ -123,6 +137,8 @@ public class OfferProcessorTest {
                 return OfferResponse.processed(Collections.emptyList(), Collections.emptyList());
             }
         });
+        when(mockMesosEventClient.getUnexpectedResources(any()))
+                .thenReturn(UnexpectedResourcesResponse.processed(Collections.emptyList()));
 
         processor.setOfferQueueSize(0).start(); // unlimited queue size
 

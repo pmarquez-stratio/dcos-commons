@@ -59,7 +59,7 @@ public class DefaultJobInfoProvider implements JobInfoProvider {
     @Override
     public Collection<String> getJobs() {
         Collection<String> jobNames = new TreeSet<>(); // Alphabetical order
-        lockR();
+        lockAllR();
         try {
             jobNames.addAll(jobs.keySet());
         } finally {
@@ -68,8 +68,11 @@ public class DefaultJobInfoProvider implements JobInfoProvider {
         return jobNames;
     }
 
+    /**
+     * Returns the specified job, or null if it's not found.
+     */
     private ServiceScheduler getJob(String jobName) {
-        lockR();
+        lockAllR();
         try {
             return jobs.get(jobName);
         } finally {
@@ -80,13 +83,22 @@ public class DefaultJobInfoProvider implements JobInfoProvider {
     /**
      * Sets a non-exclusive read lock and returns the job values.
      */
-    public Collection<ServiceScheduler> lockR() {
+    public Collection<ServiceScheduler> lockAllR() {
         rlock.lock();
         return jobs.values();
     }
 
     /**
-     * Unlocks after a prior {@link #lockR()}.
+     * Sets a non-exclusive read lock and returns the specified job, or {@code null} if it's not found. In either case,
+     * {@link #unlockR()} must be called afterwards.
+     */
+    public ServiceScheduler lockJobR(String jobName) {
+        rlock.lock();
+        return jobs.get(jobName);
+    }
+
+    /**
+     * Unlocks after a prior {@link #lockAllR()} or {@link #lockJobR(String)}.
      */
     public void unlockR() {
         rlock.unlock();

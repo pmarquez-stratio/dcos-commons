@@ -18,17 +18,19 @@ import org.slf4j.Logger;
 
 import com.codahale.metrics.Timer;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.protobuf.TextFormat;
 import com.mesosphere.sdk.offer.Constants;
+import com.mesosphere.sdk.offer.DestroyOfferRecommendation;
 import com.mesosphere.sdk.offer.LoggingUtils;
 import com.mesosphere.sdk.offer.OfferAccepter;
 import com.mesosphere.sdk.offer.OfferRecommendation;
 import com.mesosphere.sdk.offer.OfferUtils;
-import com.mesosphere.sdk.offer.ResourceCleaner;
+import com.mesosphere.sdk.offer.UnreserveOfferRecommendation;
 import com.mesosphere.sdk.queue.OfferQueue;
-import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
 
 /**
- * Handles offer processing for the framework.
+ * Handles offer processing for the framework, passing offers to an underlying {@link MesosEventClient}, which itself
+ * represents one or more underlying services.
  */
 class OfferProcessor {
 
@@ -205,52 +207,81 @@ class OfferProcessor {
 
     private void evaluateOffers(List<Protos.Offer> offers) {
         // Offer evaluation:
-        // The client (which is composed of one or more services) looks at the provided offers and returns a
-        // list of operations to perform and offers which were not used. On our end, we then perform the
-        // operations and decline the unused offers.
-        OfferResponse response = mesosEventClient.offers(offers);
+        // The client (which is composed of one or more services) looks at the provided offers and returns a list of
+        // operations to perform and offers which were not used. On our end, we then perform the requested operations
+        // and clean or decline the remaining unused offers.
+        MesosEventClient.OfferResponse offerResponse = mesosEventClient.offers(offers);
 
-        // Resource Cleaning:
-        // A ResourceCleaner ensures that reserved Resources are not leaked.  It is possible that an Agent may
-        // become inoperable for long enough that Tasks resident there were relocated.  However, this Agent may
-        // return at a later point and begin offering reserved Resources again.  To ensure that these unexpected
-        // reserved Resources are returned to the Mesos Cluster, the Resource Cleaner performs all necessary
-        // UNRESERVE and DESTROY (in the case of persistent volumes) Operations.
-        // Note: Unused reserved resources on a used offer will be cleaned in the next offer cycle.
-        ResourceCleaner resourceCleaner = new ResourceCleaner(mesosEventClient.getExpectedResources());
-        List<OfferRecommendation> cleanerRecommendations = resourceCleaner.evaluate(response.unusedOffers);
-        // Notify the client of the resources that we are about to clean. This is mainly for uninstall
-        // schedulers, which need to keep track of the remaining resources.
-        // TODO(nickbp): Service uninstall could be centralized: 'Ownership' of remaining resources could be
-        //               transferred upstream into a single common uninstall handler at the framework level,
-        //               which performs resource cleanup across all services in the framework. Additionally,
-        //               deregistration should only occur if the entire framework is being taken down, so this
-        //               common uninstaller would be able to do that once it has cleaned ALL resources across
-        //               ALL services.
-        mesosEventClient.cleaned(cleanerRecommendations);
+        // Resource Cleaning is needed to clean up offered resources in several scenarios:
+        // - Services may be uninstalling, in which case all of their resources will appear to be 'unexpected'.
+        // - Services may want to decommission a subset of its tasks, in which case they will appear as 'unexpected',
+        //   even though the overall service is not being uninstalled.
+        // - Mesos Agents may become inoperable for long enough that Tasks resident there were relocated and their
+        //   resources were effectively forgotten. However, this Agent may return at a later point and begin offering
+        //   those forgotten reserved Resources again.
+        // In all of these cases, we need to ensure that these unexpected reserved Resources are returned to the Mesos
+        // Cluster. To do this we perform all necessary UNRESERVE and/or DESTROY Operations against those resources.
+        // Note: We only perform this cleanup for unused offers. Unused reserved resources within used offers will be
+        // cleaned when they are offered again in the next offer cycle.
+        MesosEventClient.UnexpectedResourcesResponse unexpectedResourcesResponse =
+                mesosEventClient.getUnexpectedResources(offerResponse.unusedOffers);
+        Collection<OfferRecommendation> cleanupRecommendations =
+                toCleanupRecommendations(unexpectedResourcesResponse.offerResources);
 
-        // Decline the offers that haven't been used for offer evaluation nor offer cleaning.
+        // Decline the offers that haven't been used for either offer evaluation or resource cleanup.
         Collection<Protos.Offer> unusedOffers =
-                OfferUtils.filterOutAcceptedOffers(response.unusedOffers, cleanerRecommendations);
+                OfferUtils.filterOutAcceptedOffers(offerResponse.unusedOffers, cleanupRecommendations);
         if (!unusedOffers.isEmpty()) {
-            switch (response.result) {
-            case NOT_READY:
-                // The client isn't ready yet. Decline these offers for a brief interval.
-                declineShort(unusedOffers);
-                break;
-            case PROCESSED:
-                // The client turned down these offers. Decline these offers for a long interval.
+            if (offerResponse.result == MesosEventClient.Result.PROCESSED
+                    && unexpectedResourcesResponse.result == MesosEventClient.Result.PROCESSED) {
+                // The client successfully processed offers and unexpected resources.
+                // Decline the unused offers for a long interval.
                 declineLong(unusedOffers);
-                break;
+            } else {
+                // The client wasn't ready to process offers and/or failed to process unexpected resources.
+                // Decline the unused offers for a brief interval.
+                declineShort(unusedOffers);
             }
         }
 
-        // Accept the offers with the operations to be performed against them:
+        // Accept the offers which have operations to be performed against them:
         List<OfferRecommendation> allRecommendations = new ArrayList<>();
-        allRecommendations.addAll(response.recommendations);
-        allRecommendations.addAll(cleanerRecommendations);
+        allRecommendations.addAll(offerResponse.recommendations);
+        allRecommendations.addAll(cleanupRecommendations);
         Metrics.incrementRecommendations(allRecommendations);
         offerAccepter.accept(allRecommendations);
+    }
+
+    /**
+     * Converts the provided {@code OfferResources} instances into an ordered list of destroy and/or unreserve
+     * operations.
+     */
+    private static Collection<OfferRecommendation> toCleanupRecommendations(
+            Collection<OfferResources> offerResourcesList) {
+        // ORDERING IS IMPORTANT:
+        //    The resource lifecycle is RESERVE -> CREATE -> DESTROY -> UNRESERVE
+        //    Therefore we *must* put any DESTROY calls before any UNRESERVE calls
+        List<OfferRecommendation> destroyRecommendations = new ArrayList<>();
+        List<OfferRecommendation> unreserveRecommendations = new ArrayList<>();
+
+        for (OfferResources offerResources : offerResourcesList) {
+            for (Protos.Resource resource : offerResources.getResources()) {
+                if (resource.hasDisk() && resource.getDisk().hasPersistence()) {
+                    // Permanent volume to be DESTROYed (and also UNRESERVEd)
+                    LOGGER.info("Volume to be destroyed: {}", TextFormat.shortDebugString(resource));
+                    destroyRecommendations.add(new DestroyOfferRecommendation(offerResources.getOffer(), resource));
+                }
+                // Reserved resource OR permanent volume to be UNRESERVEd
+                LOGGER.info("Resource to be unreserved: {}", TextFormat.shortDebugString(resource));
+                unreserveRecommendations.add(new UnreserveOfferRecommendation(offerResources.getOffer(), resource));
+            }
+        }
+
+        // Order the recommendations as DESTROYs followed by UNRESERVEs, as mentioned above:
+        List<OfferRecommendation> allRecommendations = new ArrayList<>();
+        allRecommendations.addAll(destroyRecommendations);
+        allRecommendations.addAll(unreserveRecommendations);
+        return allRecommendations;
     }
 
     /**

@@ -101,9 +101,7 @@ public class UninstallPlanBuilder {
 
         List<Step> resourceSteps =
                 ResourceUtils.getResourceIds(ResourceUtils.getAllResources(tasksNotFailedAndErrored)).stream()
-                        .map(resourceId -> new ResourceCleanupStep(
-                                resourceId,
-                                resourceId.startsWith(Constants.TOMBSTONE_MARKER) ? Status.COMPLETE : Status.PENDING))
+                        .map(resourceId -> new ResourceCleanupStep(resourceId, Status.PENDING))
                         .collect(Collectors.toList());
         logger.info("Configuring resource cleanup of {}/{} tasks: {}/{} expected resources have been unreserved",
                 tasksNotFailedAndErrored.size(), allTasks.size(),

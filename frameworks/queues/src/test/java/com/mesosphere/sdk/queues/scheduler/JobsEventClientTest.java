@@ -5,6 +5,7 @@ import org.apache.mesos.Protos.Offer;
 import org.apache.mesos.Protos.TaskState;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -12,6 +13,8 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 import com.mesosphere.sdk.scheduler.ServiceScheduler;
+import com.mesosphere.sdk.offer.CommonIdUtils;
+import com.mesosphere.sdk.scheduler.MesosEventClient;
 import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
 import com.mesosphere.sdk.scheduler.MesosEventClient.StatusResponse;
 
@@ -45,6 +48,13 @@ public class JobsEventClientTest {
                 offers.remove(offers.size() - 1);
             }
             return OfferResponse.processed(Collections.emptyList(), offers);
+        }
+    };
+
+    private static final Answer<OfferResponse> NO_CHANGES = new Answer<OfferResponse>() {
+        @Override
+        public OfferResponse answer(InvocationOnMock invocation) throws Throwable {
+            return OfferResponse.processed(Collections.emptyList(), getOffersArgument(invocation));
         }
     };
 
@@ -92,24 +102,30 @@ public class JobsEventClientTest {
     public void offerNoClients() {
         // Empty offers: All clients should have been pinged regardless
         OfferResponse response = client.offers(Collections.emptyList());
-        Assert.assertEquals(OfferResponse.Result.NOT_READY, response.result);
+        Assert.assertEquals(MesosEventClient.Result.FAILED, response.result);
         Assert.assertTrue(response.unusedOffers.isEmpty());
 
         // Seven offers: Only the middle offer is left at the end.
         List<Protos.Offer> offers = Arrays.asList(getOffer(1), getOffer(2), getOffer(3));
         response = client.offers(offers);
-        Assert.assertEquals(OfferResponse.Result.NOT_READY, response.result);
+        Assert.assertEquals(MesosEventClient.Result.FAILED, response.result);
         Assert.assertEquals(offers, response.unusedOffers);
+    }
+
+    @Ignore("TODO")
+    @Test
+    public void writeUnexpectedResourcesTests() {
+        Assert.fail("TODO tests for getUnexpectedResources");
     }
 
     @Test
     public void offerPruning() {
         // Client 1,4,7: returns all but the first offer
         // Client 2,5,8: returns all but the last offer
-        // Client 3,6,9: not ready, no change to offers
+        // Client 3,6,9: no change to offers
         when(mockClient1.offers(any())).then(DROP_FIRST_OFFER);
         when(mockClient2.offers(any())).then(DROP_LAST_OFFER);
-        when(mockClient3.offers(any())).then(OFFER_NOT_READY);
+        when(mockClient3.offers(any())).then(NO_CHANGES);
         client
                 .putJob("1", mockClient1)
                 .putJob("2", mockClient2)
@@ -123,7 +139,7 @@ public class JobsEventClientTest {
 
         // Empty offers: All clients should have been pinged regardless
         OfferResponse response = client.offers(Collections.emptyList());
-        Assert.assertEquals(OfferResponse.Result.PROCESSED, response.result);
+        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
         Assert.assertTrue(response.unusedOffers.isEmpty());
         verify(mockClient1, times(3)).offers(Collections.emptyList());
         verify(mockClient2, times(3)).offers(Collections.emptyList());
@@ -135,7 +151,7 @@ public class JobsEventClientTest {
                 getOffer(1), getOffer(2), getOffer(3),
                 middleOffer,
                 getOffer(5), getOffer(6), getOffer(7)));
-        Assert.assertEquals(OfferResponse.Result.PROCESSED, response.result);
+        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
         Assert.assertEquals(1, response.unusedOffers.size());
         Assert.assertEquals(middleOffer, response.unusedOffers.get(0));
         verify(mockClient1, times(6)).offers(any());
@@ -144,45 +160,47 @@ public class JobsEventClientTest {
     }
 
     @Test
-    public void offerAllClientsNotReady() {
+    public void offerSomeClientsNotReady() {
         // All three clients: Not ready
-        when(mockClient1.offers(any())).then(OFFER_NOT_READY);
+        when(mockClient1.offers(any())).then(NO_CHANGES);
+        when(mockClient2.offers(any())).then(OFFER_NOT_READY);
         client
                 .putJob("1", mockClient1)
-                .putJob("2", mockClient1)
+                .putJob("2", mockClient2)
                 .putJob("3", mockClient1);
 
         // Empty offers: All clients should have been pinged regardless
         OfferResponse response = client.offers(Collections.emptyList());
-        Assert.assertEquals(OfferResponse.Result.NOT_READY, response.result);
+        Assert.assertEquals(MesosEventClient.Result.FAILED, response.result);
         Assert.assertTrue(response.unusedOffers.isEmpty());
-        verify(mockClient1, times(3)).offers(Collections.emptyList());
+        verify(mockClient1, times(2)).offers(Collections.emptyList());
+        verify(mockClient2, times(1)).offers(Collections.emptyList());
 
-        // Seven offers: Only the middle offer is left at the end.
+        // Three offers: All clients should have been pinged with the same offers.
         List<Protos.Offer> offers = Arrays.asList(getOffer(1), getOffer(2), getOffer(3));
         response = client.offers(offers);
-        Assert.assertEquals(OfferResponse.Result.NOT_READY, response.result);
+        Assert.assertEquals(MesosEventClient.Result.FAILED, response.result);
         Assert.assertEquals(offers, response.unusedOffers);
-        verify(mockClient1, times(3)).offers(offers);
+        verify(mockClient1, times(2)).offers(offers);
+        verify(mockClient2, times(1)).offers(offers);
     }
 
     @Test
-    public void statusAllUnknown() {
+    public void statusUnknown() {
         // Client 1,2,3: unknown task
-        when(mockClient1.status(any())).thenReturn(StatusResponse.unknownTask());
+        when(mockClient2.status(any())).thenReturn(StatusResponse.unknownTask());
         client
                 .putJob("1", mockClient1)
-                .putJob("2", mockClient1)
+                .putJob("2", mockClient2)
                 .putJob("3", mockClient1);
 
-        Protos.TaskStatus status = getStatus();
-        Assert.assertEquals(StatusResponse.Result.UNKNOWN_TASK, client.status(status).result);
-        verify(mockClient1, times(3)).status(status);
+        Protos.TaskStatus status = getStatus("2");
+        Assert.assertEquals(MesosEventClient.Result.FAILED, client.status(status).result);
+        verifyZeroInteractions(mockClient1); // Clients "1" and "3" left alone
+        verify(mockClient2, times(1)).status(status);
     }
     @Test
     public void statusProcessed() {
-        // Client 1,2,4: unknown task
-        // Client 3: processed
         when(mockClient1.status(any())).thenReturn(StatusResponse.unknownTask());
         when(mockClient2.status(any())).thenReturn(StatusResponse.processed());
         client
@@ -191,15 +209,15 @@ public class JobsEventClientTest {
                 .putJob("3", mockClient2)
                 .putJob("4", mockClient1);
 
-        Protos.TaskStatus status = getStatus();
-        Assert.assertEquals(StatusResponse.Result.PROCESSED, client.status(status).result);
-        verify(mockClient1, times(2)).status(status); // stopped after hitting PROCESSED returned by mockClient2
+        Protos.TaskStatus status = getStatus("3");
+        Assert.assertEquals(MesosEventClient.Result.PROCESSED, client.status(status).result);
+        verifyZeroInteractions(mockClient1); // Clients "1", "2", "3" left alone
         verify(mockClient2, times(1)).status(status);
     }
 
-    private static Protos.TaskStatus getStatus() {
+    private static Protos.TaskStatus getStatus(String clientName) {
         return Protos.TaskStatus.newBuilder()
-                .setTaskId(Protos.TaskID.newBuilder().setValue("foo").build())
+                .setTaskId(CommonIdUtils.toTaskId(clientName, "foo"))
                 .setState(TaskState.TASK_FINISHED)
                 .build();
     }

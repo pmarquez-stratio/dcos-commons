@@ -10,9 +10,9 @@ import com.mesosphere.sdk.offer.*;
 import com.mesosphere.sdk.offer.evaluate.OfferEvaluator;
 import com.mesosphere.sdk.offer.history.OfferOutcomeTracker;
 import com.mesosphere.sdk.scheduler.decommission.DecommissionPlanFactory;
-import com.mesosphere.sdk.scheduler.decommission.DecommissionRecorder;
 import com.mesosphere.sdk.scheduler.plan.*;
 import com.mesosphere.sdk.scheduler.recovery.FailureUtils;
+import com.mesosphere.sdk.scheduler.uninstall.UninstallRecorder;
 import com.mesosphere.sdk.specification.ServiceSpec;
 import com.mesosphere.sdk.state.*;
 import com.mesosphere.sdk.storage.Persister;
@@ -36,8 +36,8 @@ public class DefaultScheduler extends ServiceScheduler {
     private final PlanCoordinator planCoordinator;
     private final Collection<Object> customResources;
     private final Map<String, EndpointProducer> customEndpointProducers;
-    private final OperationRecorder launchRecorder;
-    private final Optional<OperationRecorder> decommissionRecorder;
+    private final PersistentLaunchRecorder launchRecorder;
+    private final Optional<UninstallRecorder> decommissionRecorder;
     private final OfferOutcomeTracker offerOutcomeTracker;
     private final PlanScheduler planScheduler;
 
@@ -87,10 +87,10 @@ public class DefaultScheduler extends ServiceScheduler {
         this.launchRecorder = new PersistentLaunchRecorder(stateStore, serviceSpec);
         Optional<DecommissionPlanManager> decommissionManager = getDecommissionManager(planCoordinator);
         if (decommissionManager.isPresent()) {
-            Collection<Step> steps = decommissionManager.get().getPlan().getChildren().stream()
-                    .flatMap(phase -> phase.getChildren().stream())
-                    .collect(Collectors.toList());
-            this.decommissionRecorder = Optional.of(new DecommissionRecorder(serviceSpec.getName(), stateStore, steps));
+            this.decommissionRecorder = Optional.of(new UninstallRecorder(
+                    serviceSpec.getName(),
+                    stateStore,
+                    decommissionManager.get().getResourceSteps()));
         } else {
             this.decommissionRecorder = Optional.empty();
         }
@@ -215,14 +215,14 @@ public class DefaultScheduler extends ServiceScheduler {
         try {
             launchRecorder.record(offerRecommendations);
             if (decommissionRecorder.isPresent()) {
-                decommissionRecorder.get().record(offerRecommendations);
+                decommissionRecorder.get().recordRecommendations(offerRecommendations);
             }
+            return offerRecommendations;
         } catch (Exception ex) {
-            // TODO(nickbp): This doesn't undo prior recorded operations, so things could be left in a bad state.
-            logger.error("Failed to record offer operations", ex);
+            // TODO(nickbp): If a subset of operations were recorded, things could still be left in a bad state.
+            logger.error("Failed to record offer operations, returning empty operations list", ex);
+            return Collections.emptyList();
         }
-
-        return offerRecommendations;
     }
 
     /**
@@ -246,16 +246,68 @@ public class DefaultScheduler extends ServiceScheduler {
         return filteredOfferRecommendations;
     }
 
+    /**
+     * Returns the resources which are not expected by this service.
+     *
+     * <p>Resources can be unexpected for one of the following reasons:
+     * <ul>
+     * <li>The resource is from an old task and the service has since moved on (e.g. agent recently revived)</li>
+     * <li>The resource is from a prior version of a replaced task (marked as permanently failed)</li>
+     * <li>The resource is part of a task that's being decommissioned. In this case we also notify the decommission plan
+     * that the resource is (about to be) cleaned.</li></ul>
+     */
     @Override
-    public void cleaned(Collection<OfferRecommendation> recommendations) {
+    public UnexpectedResourcesResponse getUnexpectedResources(List<Protos.Offer> unusedOffers) {
+        // First, determine which resource IDs we want to keep. Anything not listed here will be destroyed.
+        final Set<String> resourceIdsToKeep;
         try {
-            if (decommissionRecorder.isPresent()) {
-                decommissionRecorder.get().record(recommendations);
-            }
-        } catch (Exception ex) {
-            // TODO(nickbp): This doesn't undo prior recorded operations, so things could be left in a bad state.
-            logger.error("Failed to record cleanup operations", ex);
+            resourceIdsToKeep = stateStore.fetchTasks().stream()
+                    // A known task's resources should be kept if:
+                    // - the task is not marked as permanently failed, and
+                    // - the task is not in the process of being decommissioned
+                    .filter(taskInfo ->
+                            !FailureUtils.isPermanentlyFailed(taskInfo) &&
+                            !stateStore.fetchGoalOverrideStatus(taskInfo.getName())
+                                    .equals(DecommissionPlanFactory.DECOMMISSIONING_STATUS))
+                    .map(taskInfo -> ResourceUtils.getResourceIds(ResourceUtils.getAllResources(taskInfo)))
+                    .flatMap(Collection::stream)
+                    .collect(Collectors.toSet());
+        } catch (Exception e) {
+            logger.error("Failed to fetch expected tasks to determine unexpected resources", e);
+            return UnexpectedResourcesResponse.failed(Collections.emptyList());
         }
+
+        // Then, select any resources (and their parent offers) which are not in the above whitelist.
+        Collection<OfferResources> unexpectedResources = new ArrayList<>();
+        for (Protos.Offer offer : unusedOffers) {
+            OfferResources unexpectedResourcesForOffer = new OfferResources(offer);
+            for (Protos.Resource resource : offer.getResourcesList()) {
+                if (!ResourceUtils.getReservation(resource).isPresent()) {
+                    continue; // Not a reserved resource, disregard
+                }
+                Optional<String> resourceId = ResourceUtils.getResourceId(resource);
+                if (!resourceId.isPresent() || !resourceIdsToKeep.contains(resourceId.get())) {
+                    unexpectedResourcesForOffer.add(resource);
+                }
+            }
+            if (!unexpectedResourcesForOffer.getResources().isEmpty()) {
+                unexpectedResources.add(unexpectedResourcesForOffer);
+            }
+        }
+
+        // Finally, notify any decommissionRecorder with the resources that are about to be unreserved/destroyed. In
+        // practice this should be handled via the offer evaluation call above, but it can't hurt to also check here.
+        if (decommissionRecorder.isPresent()) {
+            try {
+                decommissionRecorder.get().recordResources(unexpectedResources);
+            } catch (Exception e) {
+                // Failed to record the decommission. Refrain from returning these resources as unexpected for now, try
+                // again later.
+                logger.error("Failed to record unexpected resources in decommission recorder", e);
+                return UnexpectedResourcesResponse.failed(Collections.emptyList());
+            }
+        }
+        return UnexpectedResourcesResponse.processed(unexpectedResources);
     }
 
     @Override
@@ -285,20 +337,5 @@ public class DefaultScheduler extends ServiceScheduler {
                 logger.warn("Unable to store network info for status update: " + status, e);
             }
         }
-    }
-
-    @Override
-    public Collection<Protos.Resource> getExpectedResources() {
-        return stateStore.fetchTasks().stream()
-                // The task's resources should be unreserved if:
-                // - the task is marked as permanently failed, or
-                // - the task is in the process of being decommissioned
-                .filter(taskInfo ->
-                        !FailureUtils.isPermanentlyFailed(taskInfo) &&
-                        !stateStore.fetchGoalOverrideStatus(taskInfo.getName())
-                                .equals(DecommissionPlanFactory.DECOMMISSIONING_STATUS))
-                .map(ResourceUtils::getAllResources)
-                .flatMap(Collection::stream)
-                .collect(Collectors.toList());
     }
 }

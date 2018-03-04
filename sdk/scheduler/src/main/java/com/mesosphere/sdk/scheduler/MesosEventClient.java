@@ -3,7 +3,6 @@ package com.mesosphere.sdk.scheduler;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-
 import org.apache.mesos.Protos;
 
 import com.mesosphere.sdk.offer.OfferRecommendation;
@@ -14,27 +13,27 @@ import com.mesosphere.sdk.offer.OfferRecommendation;
 public interface MesosEventClient {
 
     /**
-     * Response object to be returned by {@code offers()}.
+     * The outcome value to be included in a response object.
+     */
+    public enum Result {
+        /**
+         * The client failed or was not ready to process the request. Short-decline and come back later.
+         */
+        FAILED,
+
+        /**
+         * The client processed the request successfully.
+         */
+        PROCESSED
+    }
+
+    /**
+     * Response object to be returned by a call to {@link MesosEventClient#offers(List)}.
      */
     public static class OfferResponse {
 
         /**
-         * The outcome of this offers call.
-         */
-        public enum Result {
-            /**
-             * The client was not ready to process these offers. Come back later.
-             */
-            NOT_READY,
-
-            /**
-             * The client processed these offers and was not interested in them.
-             */
-            PROCESSED
-        }
-
-        /**
-         * The result of the call. Delineates between "not ready" and "processed".
+         * The result of the call. Delineates between "not ready" (decline short) and "processed" (decline long).
          */
         public final Result result;
 
@@ -49,7 +48,7 @@ public interface MesosEventClient {
         public final List<Protos.Offer> unusedOffers;
 
         public static OfferResponse notReady(List<Protos.Offer> allOffers) {
-            return new OfferResponse(Result.NOT_READY, Collections.emptyList(), allOffers);
+            return new OfferResponse(Result.FAILED, Collections.emptyList(), allOffers);
         }
 
         public static OfferResponse processed(
@@ -64,26 +63,39 @@ public interface MesosEventClient {
             this.unusedOffers = unusedOffers;
         }
     }
-
     /**
-     * Response object to be returned by {@code status()}.
+     * Response object to be returned by a call to {@link MesosEventClient##getUnexpectedResources(List)}.
      */
-    public static class StatusResponse {
+    public static class UnexpectedResourcesResponse {
 
         /**
-         * The outcome of this status call.
+         * The result of the call. Delineates between "failed" (decline short) and "processed" (decline long).
          */
-        public enum Result {
-            /**
-             * The task is not known to this service.
-             */
-            UNKNOWN_TASK,
+        public final Result result;
 
-            /**
-             * The task status was processed.
-             */
-            PROCESSED
+        /**
+         * The resources which are unexpected, paired with their parent offers.
+         */
+        public final Collection<OfferResources> offerResources;
+
+        public static UnexpectedResourcesResponse failed(Collection<OfferResources> offerResources) {
+            return new UnexpectedResourcesResponse(Result.FAILED, offerResources);
         }
+
+        public static UnexpectedResourcesResponse processed(Collection<OfferResources> offerResources) {
+            return new UnexpectedResourcesResponse(Result.PROCESSED, offerResources);
+        }
+
+        private UnexpectedResourcesResponse(Result result, Collection<OfferResources> offerResources) {
+            this.result = result;
+            this.offerResources = offerResources;
+        }
+    }
+
+    /**
+     * Response object to be returned by a call to {@link MesosEventClient#status(org.apache.mesos.Protos.TaskStatus)}.
+     */
+    public static class StatusResponse {
 
         /**
          * The result of the call. Delineates between "unknown" and "processed".
@@ -91,7 +103,7 @@ public interface MesosEventClient {
         public final Result result;
 
         public static StatusResponse unknownTask() {
-            return new StatusResponse(Result.UNKNOWN_TASK);
+            return new StatusResponse(Result.FAILED);
         }
 
         public static StatusResponse processed() {
@@ -105,38 +117,42 @@ public interface MesosEventClient {
 
     /**
      * Called when the framework has registered (or re-registered) with Mesos.
+     *
+     * @param reRegistered Whether this is an initial registration ({@code false}) or a re-registration ({@code true})
      */
     public void register(boolean reRegistered);
 
     /**
      * Called when the framework has received offers from Mesos. The provided list may be empty.
      *
-     * @return The list of offers which were NOT used by this client. For example, a no-op call would just return the
-     *         list of {@code offers} that were provided.
+     * @param offers A list of offers which may be used in offer evaluation
+     * @return The response containing a list of operations to be performed against the offers, as well as a list of
+     *         offers which were left unused. See {@link OfferResponse}
      */
     public OfferResponse offers(List<Protos.Offer> offers);
 
     /**
-     * Returns a list of known/expected resources owned by this client. Any reserved resources not on this list will be
-     * unreserved/destroyed.
-     */
-    public Collection<Protos.Resource> getExpectedResources();
-
-    /**
-     * Called when resources have been cleaned. Mainly useful for uninstall, when cleaned resources can be marked as
-     * completed.
+     * Returns a list of resources from the provided list of offers which are not recognized by this client. The
+     * returned unexpected resources will immediately be unreserved/destroyed.
      *
-     * @param recommendations A list of zero or more {@code UninstallRecommendation}s
+     * @param unusedOffers The list of offers which were unclaimed in a prior call to {@link #offers(List)}
+     * @return A subset of the provided offers paired with their resources to be unreserved/destroyed. May be paired
+     *         with an error state if remaining unused offers should be declined-short rather than declined-long.
      */
-    public void cleaned(Collection<OfferRecommendation> recommendations);
+    public UnexpectedResourcesResponse getUnexpectedResources(List<Protos.Offer> unusedOffers);
 
     /**
      * Called when the framework has received a task status update from Mesos.
+     *
+     * @param status The status message describing the new state of a task
+     * @return The response which describes whether the status was successfully processed
      */
     public StatusResponse status(Protos.TaskStatus status);
 
     /**
-     * Returns any HTTP resources to be served by this instance.
+     * Returns any HTTP resources to be served on behalf of this instance.
+     *
+     * @return A list of annotated resource objects to be served by Jetty
      */
     public Collection<Object> getHTTPEndpoints();
 }

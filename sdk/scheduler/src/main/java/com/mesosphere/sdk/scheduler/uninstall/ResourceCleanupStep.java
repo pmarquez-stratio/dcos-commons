@@ -1,13 +1,10 @@
 package com.mesosphere.sdk.scheduler.uninstall;
 
-import com.mesosphere.sdk.offer.OfferRecommendation;
-import com.mesosphere.sdk.offer.ResourceUtils;
-import com.mesosphere.sdk.offer.UninstallRecommendation;
 import com.mesosphere.sdk.scheduler.plan.PodInstanceRequirement;
 import com.mesosphere.sdk.scheduler.plan.Status;
 
-import java.util.Collection;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Step which implements the uninstalling of a particular reserved resource. For instance, persistent volumes and cpu.
@@ -35,18 +32,12 @@ public class ResourceCleanupStep extends UninstallStep {
         return getPodInstanceRequirement();
     }
 
-    @Override
-    public void updateOfferStatus(Collection<OfferRecommendation> recommendations) {
-        // Expecting a singleton UninstallRecommendation attached to a resource with a resource ID. If it matches
-        // the resource ID for this step, we mark the step as COMPLETE.
-        boolean isMatched = recommendations.stream()
-                .filter(offerRecommendation -> offerRecommendation instanceof UninstallRecommendation)
-                .map(offerRecommendation -> (UninstallRecommendation) offerRecommendation)
-                .map(UninstallRecommendation::getResource)
-                .map(ResourceUtils::getResourceId)
-                .filter(uninstallResourceId -> uninstallResourceId.isPresent())
-                .anyMatch(uninstallResourceId -> resourceId.equals(uninstallResourceId.get()));
-        if (isMatched) {
+    /**
+     * Notifies this step that some resource ids are about to be unreserved. If any of the resource ids are relevante to
+     * this step, it will update its status to {@code COMPLETE}.
+     */
+    public void updateResourceStatus(Set<String> uninstalledResourceIds) {
+        if (uninstalledResourceIds.contains(resourceId)) {
             logger.info("Completed dereservation of resource {}", resourceId);
             setStatus(Status.COMPLETE);
         }

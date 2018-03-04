@@ -63,6 +63,7 @@ public class RoundRobinByAttributeRuleTest extends DefaultCapabilitiesTestSuite 
 
     private static Offer offerWithAttribute(String name, String value) {
         Protos.Resource resource = ResourceBuilder.fromUnreservedValue(
+                TestConstants.SERVICE_NAME,
                 "cpus",
                 Protos.Value.newBuilder()
                         .setType(Protos.Value.Type.SCALAR)

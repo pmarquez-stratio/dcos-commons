@@ -50,6 +50,7 @@ public class RoundRobinByHostnameRuleTest extends DefaultCapabilitiesTestSuite {
     private static Offer offerWithHost(String host) {
         return OfferTestUtils.getCompleteOffer(
                 ResourceBuilder.fromUnreservedValue(
+                        TestConstants.SERVICE_NAME,
                         "cpus",
                         Protos.Value.newBuilder()
                                 .setType(Protos.Value.Type.SCALAR)

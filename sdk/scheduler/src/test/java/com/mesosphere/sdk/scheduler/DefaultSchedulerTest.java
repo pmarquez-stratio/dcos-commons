@@ -8,11 +8,11 @@ import com.mesosphere.sdk.offer.LoggingUtils;
 import com.mesosphere.sdk.offer.OfferRecommendation;
 import com.mesosphere.sdk.offer.taskdata.TaskLabelWriter;
 import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
+import com.mesosphere.sdk.scheduler.MesosEventClient.UnexpectedResourcesResponse;
 import com.mesosphere.sdk.scheduler.decommission.DecommissionPlanFactory;
 import com.mesosphere.sdk.scheduler.plan.*;
 import com.mesosphere.sdk.specification.*;
 import com.mesosphere.sdk.state.FrameworkStore;
-import com.mesosphere.sdk.state.GoalStateOverride;
 import com.mesosphere.sdk.state.StateStore;
 import com.mesosphere.sdk.state.StateStoreUtils;
 import com.mesosphere.sdk.storage.MemPersister;
@@ -194,7 +194,7 @@ public class DefaultSchedulerTest {
         verify(mockSchedulerDriver, times(1)).reconcileTasks(any());
 
         OfferResponse offerResponse = defaultScheduler.offers(Collections.emptyList());
-        Assert.assertEquals(OfferResponse.Result.PROCESSED, offerResponse.result);
+        Assert.assertEquals(MesosEventClient.Result.PROCESSED, offerResponse.result);
         Assert.assertTrue(offerResponse.unusedOffers.isEmpty());
         Assert.assertTrue(offerResponse.recommendations.isEmpty());
     }
@@ -392,7 +392,7 @@ public class DefaultSchedulerTest {
 
         // First attempt doesn't do anything because reconciliation hadn't completed yet
         response = defaultScheduler.offers(Arrays.asList(insufficientOffer));
-        Assert.assertEquals(OfferResponse.Result.NOT_READY, response.result);
+        Assert.assertEquals(MesosEventClient.Result.FAILED, response.result);
         Assert.assertEquals(insufficientOffer, response.unusedOffers.get(0));
         verify(mockSchedulerDriver, times(0)).killTask(any());
         Assert.assertEquals(Status.PENDING, stepTaskA0.getStatus());
@@ -406,7 +406,7 @@ public class DefaultSchedulerTest {
 
         // Second attempt after reconciliation results in triggering task relaunch
         response = defaultScheduler.offers(Arrays.asList(insufficientOffer));
-        Assert.assertEquals(OfferResponse.Result.PROCESSED, response.result);
+        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
         Assert.assertEquals(insufficientOffer, response.unusedOffers.get(0));
         verify(mockSchedulerDriver, times(1)).killTask(launchedTaskId);
         Assert.assertEquals(Status.PREPARED, stepTaskA0.getStatus());
@@ -418,7 +418,7 @@ public class DefaultSchedulerTest {
 
         Protos.Offer expectedOffer = OfferTestUtils.getCompleteOffer(expectedResources);
         response = defaultScheduler.offers(Arrays.asList(expectedOffer));
-        Assert.assertEquals(OfferResponse.Result.PROCESSED, response.result);
+        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
         Assert.assertTrue(response.unusedOffers.isEmpty());
         Assert.assertEquals(Arrays.asList(Protos.Offer.Operation.Type.RESERVE, Protos.Offer.Operation.Type.LAUNCH_GROUP),
                 response.recommendations.stream().map(r -> r.getOperation().getType()).collect(Collectors.toList()));
@@ -574,14 +574,15 @@ public class DefaultSchedulerTest {
         install();
 
         StateStore stateStore = new StateStore(persister);
-        // Pick an arbitrary task:
+        // Pick an arbitrary task with resources:
         Protos.TaskInfo taskInfo = stateStore.fetchTasks().iterator().next();
+        Assert.assertFalse(taskInfo.getResourcesList().isEmpty());
 
         // Verify that the task's resources are currently expected:
-        Collection<Protos.Resource> expectedResources = defaultScheduler.getExpectedResources();
-        for (Protos.Resource taskResource : taskInfo.getResourcesList()) {
-            Assert.assertTrue(expectedResources.contains(taskResource));
-        }
+        UnexpectedResourcesResponse response =
+                defaultScheduler.getUnexpectedResources(OfferTestUtils.getOffers(taskInfo.getResourcesList()));
+        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
+        Assert.assertTrue(response.offerResources.isEmpty());
 
         // Mark the task as permanently failed:
         stateStore.storeTasks(Collections.singletonList(
@@ -590,10 +591,10 @@ public class DefaultSchedulerTest {
                         .build()));
 
         // Verify that the task's resources are no longer expected:
-        expectedResources = defaultScheduler.getExpectedResources();
-        for (Protos.Resource taskResource : taskInfo.getResourcesList()) {
-            Assert.assertFalse(expectedResources.contains(taskResource));
-        }
+        response = defaultScheduler.getUnexpectedResources(OfferTestUtils.getOffers(taskInfo.getResourcesList()));
+        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
+        Assert.assertEquals(1, response.offerResources.size());
+        Assert.assertEquals(taskInfo.getResourcesList(), response.offerResources.iterator().next().getResources());
     }
 
     @Test
@@ -601,33 +602,26 @@ public class DefaultSchedulerTest {
         install();
 
         StateStore stateStore = new StateStore(persister);
-        // Pick an arbitrary task:
-        Protos.TaskInfo firstTask = stateStore.fetchTasks().iterator().next();
+        // Pick an arbitrary task with resources:
+        Protos.TaskInfo taskInfo = stateStore.fetchTasks().iterator().next();
+        Assert.assertFalse(taskInfo.getResourcesList().isEmpty());
 
         // Verify that the task's resources are currently expected:
-        Collection<Protos.Resource> expectedResources = defaultScheduler.getExpectedResources();
-        for (Protos.Resource taskResource : firstTask.getResourcesList()) {
-            Assert.assertTrue(expectedResources.contains(taskResource));
-        }
+        UnexpectedResourcesResponse response =
+                defaultScheduler.getUnexpectedResources(OfferTestUtils.getOffers(taskInfo.getResourcesList()));
+        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
+        Assert.assertTrue(response.offerResources.isEmpty());
 
         // Mark the task as decommissioning:
-        GoalStateOverride.Status originalStatus = stateStore.fetchGoalOverrideStatus(firstTask.getName());
-        stateStore.storeGoalOverrideStatus(firstTask.getName(), DecommissionPlanFactory.DECOMMISSIONING_STATUS);
+        stateStore.storeGoalOverrideStatus(taskInfo.getName(), DecommissionPlanFactory.DECOMMISSIONING_STATUS);
 
         // Verify that the task's resources are no longer expected:
-        expectedResources = defaultScheduler.getExpectedResources();
-        for (Protos.Resource taskResource : firstTask.getResourcesList()) {
-            Assert.assertFalse(expectedResources.contains(taskResource));
-        }
+        response = defaultScheduler.getUnexpectedResources(OfferTestUtils.getOffers(taskInfo.getResourcesList()));
+        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
+        Assert.assertEquals(1, response.offerResources.size());
+        Assert.assertEquals(taskInfo.getResourcesList(), response.offerResources.iterator().next().getResources());
 
-        // Reset the task's override status:
-        stateStore.storeGoalOverrideStatus(firstTask.getName(), originalStatus);
-
-        // Verify that the task's resources are expected again:
-        expectedResources = defaultScheduler.getExpectedResources();
-        for (Protos.Resource taskResource : firstTask.getResourcesList()) {
-            Assert.assertTrue(expectedResources.contains(taskResource));
-        }
+        // Note: The task's resources are still present in the state store, because we didn't set up a decommission plan
     }
 
     @Test

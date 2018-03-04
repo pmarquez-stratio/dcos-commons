@@ -137,9 +137,9 @@ public class FrameworkScheduler implements Scheduler {
         StatusResponse response = mesosEventClient.status(status);
         TaskKiller.update(status);
         switch (response.result) {
-        case UNKNOWN_TASK:
-            LOGGER.info("Got UNKNOWN_TASK in response to status update, marking task to be killed: "
-                    + status.getTaskId().getValue());
+        case FAILED:
+            LOGGER.info("Got unknown task in response to status update, marking task to be killed: {}",
+                    status.getTaskId().getValue());
             TaskKiller.killTask(status.getTaskId());
             break;
         case PROCESSED:

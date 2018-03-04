@@ -6,7 +6,6 @@ import org.apache.mesos.Protos.Offer;
 import org.apache.mesos.Protos.Resource;
 import org.apache.mesos.Protos.Value;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
@@ -15,7 +14,8 @@ import java.util.*;
  * consumption of the {@link Offer}'s resources.
  */
 public class MesosResourcePool {
-    private static final Logger logger = LoggerFactory.getLogger(MesosResourcePool.class);
+    private final Logger logger;
+    private final String serviceName;
     private Offer offer;
 
     /**
@@ -42,7 +42,9 @@ public class MesosResourcePool {
     /**
      * Creates a new pool of resources based on what's available in the provided {@link Offer}.
      */
-    public MesosResourcePool(Offer offer, Optional<String> role) {
+    public MesosResourcePool(String serviceName, Offer offer, Optional<String> role) {
+        this.logger = LoggingUtils.getLogger(getClass(), serviceName);
+        this.serviceName = serviceName;
         this.offer = offer;
         final Collection<MesosResource> mesosResources = getMesosResources(offer, role);
         this.unreservedAtomicPool = getUnreservedAtomicPool(mesosResources);
@@ -110,7 +112,7 @@ public class MesosResourcePool {
                 Value availableValue = mesosResource.getValue();
                 if (ValueUtils.compare(availableValue, value) > 0) {
                     // Update the value in pool with the remaining unclaimed resource amount
-                    Resource remaining = ResourceBuilder.fromExistingResource(mesosResource.getResource())
+                    Resource remaining = ResourceBuilder.fromExistingResource(serviceName, mesosResource.getResource())
                             .setValue(ValueUtils.subtract(availableValue, value))
                             .build();
                     dynamicallyReservedPoolByResourceId.put(resourceId, new MesosResource(remaining));
@@ -179,7 +181,8 @@ public class MesosResourcePool {
             pool.put(name, ValueUtils.subtract(availableValue, desiredValue));
             reservableMergedPoolByRole.put(preReservedRole, pool);
 
-            Resource.Builder builder = ResourceBuilder.fromUnreservedValue(name, desiredValue).build().toBuilder();
+            Resource.Builder builder =
+                    ResourceBuilder.fromUnreservedValue(serviceName, name, desiredValue).build().toBuilder();
             if (Capabilities.getInstance().supportsPreReservedResources() &&
                     !preReservedRole.equals(Constants.ANY_ROLE)) {
                 builder.addReservations(
