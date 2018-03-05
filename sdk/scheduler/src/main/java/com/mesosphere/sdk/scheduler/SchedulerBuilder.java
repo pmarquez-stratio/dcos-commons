@@ -8,6 +8,8 @@ import com.mesosphere.sdk.config.validate.ConfigValidator;
 import com.mesosphere.sdk.config.validate.DefaultConfigValidators;
 import com.mesosphere.sdk.curator.CuratorPersister;
 import com.mesosphere.sdk.dcos.Capabilities;
+import com.mesosphere.sdk.http.endpoints.ArtifactResource;
+import com.mesosphere.sdk.http.queries.ArtifactQueries;
 import com.mesosphere.sdk.http.types.EndpointProducer;
 import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.offer.LoggingUtils;
@@ -66,7 +68,8 @@ public class SchedulerBuilder {
     private Collection<Object> customResources = new ArrayList<>();
     private RecoveryPlanOverriderFactory recoveryPlanOverriderFactory;
     private PlanCustomizer planCustomizer;
-    private Optional<FrameworkConfig> multiServiceFrameworkConfig = Optional.empty();
+    private Optional<ArtifactQueries.TemplateUrlFactory> templateUrlFactory = Optional.empty();
+    private Optional<String> storageNamespace = Optional.empty();
 
     SchedulerBuilder(ServiceSpec serviceSpec, SchedulerConfig schedulerConfig) throws PersisterException {
         this(
@@ -162,14 +165,23 @@ public class SchedulerBuilder {
     }
 
     /**
+     * Assigns a custom factory for generating config template URLs. Otherwise a default suitable for use with
+     * {@code ArtifactResource} is used.
+     */
+    public SchedulerBuilder setTemplateUrlFactory(ArtifactQueries.TemplateUrlFactory templateUrlFactory) {
+        this.templateUrlFactory = Optional.of(templateUrlFactory);
+        return this;
+    }
+
+    /**
      * Assigns a custom framework configuration for this service. This is only relevant when a single framework is
      * running multiple services. By default the framework configuration is derived from the {@link ServiceSpec}.
      *
      * @param multiServiceFrameworkConfig a custom framework config to use, otherwise one will derived from the
      *                                    {@link ServiceSpec} provided in the constructor
      */
-    public SchedulerBuilder setMultiServiceFrameworkConfig(FrameworkConfig multiServiceFrameworkConfig) {
-        this.multiServiceFrameworkConfig = Optional.of(multiServiceFrameworkConfig);
+    public SchedulerBuilder setStorageNamespace(String storageNamespace) {
+        this.storageNamespace = Optional.of(storageNamespace);
         return this;
     }
 
@@ -186,7 +198,7 @@ public class SchedulerBuilder {
         // up in the Curator case, where we specifically want to invoke CuratorLocker before accessing the storage.
 
         // FIRST, check and/or initialize schema version before doing any other storage access:
-        int expectedVersion = multiServiceFrameworkConfig.isPresent()
+        int expectedVersion = storageNamespace.isPresent()
                 ? SUPPORTED_SCHEMA_VERSION_WITH_NAMESPACE
                 : SUPPORTED_SCHEMA_VERSION_WITHOUT_NAMESPACE;
         new SchemaVersionStore(persister).check(expectedVersion);
@@ -195,8 +207,7 @@ public class SchedulerBuilder {
         FrameworkStore frameworkStore = new FrameworkStore(persister);
         // When multi-service is enabled, store state/configs within a namespace matching the service name.
         // Otherwise use an empty namespace (the default).
-        String storageNamespace = multiServiceFrameworkConfig.isPresent()
-                ? SchedulerUtils.withEscapedSlashes(serviceSpec.getName()) : "";
+        String storageNamespace = this.storageNamespace.orElse("");
         StateStore stateStore = new StateStore(persister, storageNamespace);
         ConfigStore<ServiceSpec> configStore = new ConfigStore<>(
                 DefaultServiceSpec.getConfigurationFactory(serviceSpec), persister, storageNamespace);
@@ -314,7 +325,6 @@ public class SchedulerBuilder {
 
         return new DefaultScheduler(
                 serviceSpec,
-                multiServiceFrameworkConfig,
                 schedulerConfig,
                 customResources,
                 planCoordinator,
@@ -322,6 +332,7 @@ public class SchedulerBuilder {
                 frameworkStore,
                 stateStore,
                 configStore,
+                templateUrlFactory.orElse(ArtifactResource.getUrlFactory(serviceSpec.getName())),
                 endpointProducers);
     }
 

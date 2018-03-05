@@ -3,7 +3,7 @@ package com.mesosphere.sdk.offer.evaluate;
 import com.google.common.annotations.VisibleForTesting;
 import com.mesosphere.sdk.dcos.DcosConstants;
 import com.mesosphere.sdk.http.EndpointUtils;
-import com.mesosphere.sdk.http.endpoints.ArtifactResource;
+import com.mesosphere.sdk.http.queries.ArtifactQueries;
 import com.mesosphere.sdk.offer.*;
 import com.mesosphere.sdk.offer.evaluate.placement.PlacementUtils;
 import com.mesosphere.sdk.offer.taskdata.AuxLabelAccess;
@@ -11,7 +11,6 @@ import com.mesosphere.sdk.offer.taskdata.EnvConstants;
 import com.mesosphere.sdk.offer.taskdata.EnvUtils;
 import com.mesosphere.sdk.offer.taskdata.TaskLabelReader;
 import com.mesosphere.sdk.offer.taskdata.TaskLabelWriter;
-import com.mesosphere.sdk.scheduler.FrameworkConfig;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.scheduler.plan.PodInstanceRequirement;
 import com.mesosphere.sdk.scheduler.recovery.FailureUtils;
@@ -44,7 +43,7 @@ public class PodInfoBuilder {
     private final PodInstance podInstance;
     private final Map<String, TaskPortLookup> portsByTask;
     private final boolean useDefaultExecutor;
-    private final Optional<FrameworkConfig> multiServiceFrameworkConfig;
+    private final ArtifactQueries.TemplateUrlFactory templateUrlFactory;
 
     public PodInfoBuilder(
             PodInstanceRequirement podInstanceRequirement,
@@ -54,11 +53,11 @@ public class PodInfoBuilder {
             Collection<Protos.TaskInfo> currentPodTasks,
             Protos.FrameworkID frameworkID,
             boolean useDefaultExecutor,
-            Optional<FrameworkConfig> multiServiceFrameworkConfig,
+            ArtifactQueries.TemplateUrlFactory templateUrlFactory,
             Map<TaskSpec, GoalStateOverride> overrideMap) throws InvalidRequirementException {
         PodInstance podInstance = podInstanceRequirement.getPodInstance();
         this.useDefaultExecutor = useDefaultExecutor;
-        this.multiServiceFrameworkConfig = multiServiceFrameworkConfig;
+        this.templateUrlFactory = templateUrlFactory;
 
         // Generate new TaskInfos based on the task spec. To keep things consistent, we always generate new TaskInfos
         // from scratch, with the only carry-over being the prior task environment.
@@ -174,7 +173,7 @@ public class PodInfoBuilder {
             Optional<String> sourceRoot,
             boolean useDefaultExecutor) {
 
-        Protos.Resource.Builder builder = 
+        Protos.Resource.Builder builder =
                 ResourceBuilder.fromSpec(serviceName, volumeSpec, resourceId, persistenceId, sourceRoot)
                 .build().toBuilder();
 
@@ -299,27 +298,10 @@ public class PodInfoBuilder {
             String podType,
             TaskSpec taskSpec) {
         for (ConfigFileSpec config : taskSpec.getConfigFiles()) {
-            String url;
-            if (multiServiceFrameworkConfig.isPresent()) {
-                // Multi-service configuration. Namespace the URL within <framework>/<service>/...
-                url = ArtifactResource.getJobTemplateUrl(
-                        multiServiceFrameworkConfig.get().getFrameworkName(),
-                        serviceName,
-                        targetConfigurationId,
-                        podType,
-                        taskSpec.getName(),
-                        config.getName());
-            } else {
-                // Download from ArtifactResource.
-                url = ArtifactResource.getStandaloneServiceTemplateUrl(
-                        serviceName,
-                        targetConfigurationId,
-                        podType,
-                        taskSpec.getName(),
-                        config.getName());
-            }
+            String templateUrl =
+                    templateUrlFactory.get(targetConfigurationId, podType, taskSpec.getName(), config.getName());
             commandBuilder.addUrisBuilder()
-                    .setValue(url)
+                    .setValue(templateUrl)
                     .setOutputFile(getConfigTemplateDownloadPath(config))
                     .setExtract(false);
         }

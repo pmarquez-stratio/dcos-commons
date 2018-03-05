@@ -1,5 +1,6 @@
 package com.mesosphere.sdk.http.queries;
 
+import com.mesosphere.sdk.http.endpoints.ArtifactResource;
 import com.mesosphere.sdk.specification.ConfigFileSpec;
 import com.mesosphere.sdk.specification.PodSpec;
 import com.mesosphere.sdk.specification.ServiceSpec;
@@ -26,6 +27,15 @@ import java.util.stream.Collectors;
 public class ArtifactQueries {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ArtifactQueries.class);
+
+    /**
+     * Generates template URLs suitable for use with fetching template URLs. Schedulers using {@link ArtifactResource}
+     * should use {@link ArtifactResource#getUrlFactory(String, UUID, String, String, String)}. If a different artifact
+     * resource is being used, a different corresponding factory should be used as well.
+     */
+    public interface TemplateUrlFactory {
+        public String get(UUID configId, String podType, String taskName, String configName);
+    }
 
     private ArtifactQueries() {
         // do not instantiate

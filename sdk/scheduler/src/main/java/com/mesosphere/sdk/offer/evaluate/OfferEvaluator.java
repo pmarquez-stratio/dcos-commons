@@ -2,11 +2,11 @@ package com.mesosphere.sdk.offer.evaluate;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.TextFormat;
+import com.mesosphere.sdk.http.queries.ArtifactQueries;
 import com.mesosphere.sdk.offer.*;
 import com.mesosphere.sdk.offer.history.OfferOutcome;
 import com.mesosphere.sdk.offer.history.OfferOutcomeTracker;
 import com.mesosphere.sdk.offer.taskdata.TaskLabelReader;
-import com.mesosphere.sdk.scheduler.FrameworkConfig;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.scheduler.plan.PodInstanceRequirement;
 import com.mesosphere.sdk.scheduler.recovery.FailureUtils;
@@ -34,7 +34,7 @@ public class OfferEvaluator {
     private final StateStore stateStore;
     private final OfferOutcomeTracker offerOutcomeTracker;
     private final String serviceName;
-    private final Optional<FrameworkConfig> multiServiceFrameworkConfig;
+    private final ArtifactQueries.TemplateUrlFactory templateUrlFactory;
     private final UUID targetConfigId;
     private final SchedulerConfig schedulerConfig;
     private final boolean useDefaultExecutor;
@@ -44,7 +44,7 @@ public class OfferEvaluator {
             StateStore stateStore,
             OfferOutcomeTracker offerOutcomeTracker,
             String serviceName,
-            Optional<FrameworkConfig> multiServiceFrameworkConfig,
+            ArtifactQueries.TemplateUrlFactory templateUrlFactory,
             UUID targetConfigId,
             SchedulerConfig schedulerConfig,
             boolean useDefaultExecutor) {
@@ -53,7 +53,7 @@ public class OfferEvaluator {
         this.stateStore = stateStore;
         this.offerOutcomeTracker = offerOutcomeTracker;
         this.serviceName = serviceName;
-        this.multiServiceFrameworkConfig = multiServiceFrameworkConfig;
+        this.templateUrlFactory = templateUrlFactory;
         this.targetConfigId = targetConfigId;
         this.schedulerConfig = schedulerConfig;
         this.useDefaultExecutor = useDefaultExecutor;
@@ -100,7 +100,7 @@ public class OfferEvaluator {
                     thisPodTasks.values(),
                     frameworkStore.fetchFrameworkId().get(),
                     useDefaultExecutor,
-                    multiServiceFrameworkConfig,
+                    templateUrlFactory,
                     overrideMap);
             List<EvaluationOutcome> outcomes = new ArrayList<>();
             int failedOutcomeCount = 0;

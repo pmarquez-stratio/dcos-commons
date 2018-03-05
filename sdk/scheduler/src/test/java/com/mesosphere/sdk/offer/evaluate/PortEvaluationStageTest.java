@@ -2,6 +2,7 @@ package com.mesosphere.sdk.offer.evaluate;
 
 import com.mesosphere.sdk.offer.*;
 import com.mesosphere.sdk.dcos.DcosConstants;
+import com.mesosphere.sdk.http.endpoints.ArtifactResource;
 import com.mesosphere.sdk.offer.evaluate.placement.TestPlacementUtils;
 import com.mesosphere.sdk.offer.taskdata.TaskLabelWriter;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
@@ -40,7 +41,7 @@ public class PortEvaluationStageTest extends DefaultCapabilitiesTestSuite {
                 Collections.emptyList(),
                 TestConstants.FRAMEWORK_ID,
                 useDefaultExecutor,
-                Optional.empty(),
+                ArtifactResource.getUrlFactory(TestConstants.SERVICE_NAME),
                 Collections.emptyMap());
     }
 
@@ -463,7 +464,7 @@ public class PortEvaluationStageTest extends DefaultCapabilitiesTestSuite {
                 Collections.emptyList(),
                 TestConstants.FRAMEWORK_ID,
                 true,
-                Optional.empty(),
+                ArtifactResource.getUrlFactory(TestConstants.SERVICE_NAME),
                 Collections.emptyMap());
 
         PortEvaluationStage portEvaluationStage = new PortEvaluationStage(
@@ -489,7 +490,7 @@ public class PortEvaluationStageTest extends DefaultCapabilitiesTestSuite {
                 Collections.singleton(currentTaskBuilder.build()),
                 TestConstants.FRAMEWORK_ID,
                 true,
-                Optional.empty(),
+                ArtifactResource.getUrlFactory(TestConstants.SERVICE_NAME),
                 Collections.emptyMap());
 
         // Omit 10,000 the expected port.
@@ -510,7 +511,7 @@ public class PortEvaluationStageTest extends DefaultCapabilitiesTestSuite {
                 Collections.singleton(currentTaskBuilder.build()),
                 TestConstants.FRAMEWORK_ID,
                 true,
-                Optional.empty(),
+                ArtifactResource.getUrlFactory(TestConstants.SERVICE_NAME),
                 Collections.emptyMap());
 
         mesosResourcePool = new MesosResourcePool(TestConstants.SERVICE_NAME, offer, Optional.of(Constants.ANY_ROLE));

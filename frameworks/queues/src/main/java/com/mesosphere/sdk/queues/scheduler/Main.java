@@ -1,5 +1,6 @@
 package com.mesosphere.sdk.queues.scheduler;
 
+import com.mesosphere.sdk.queues.http.endpoints.JobsArtifactResource;
 import com.mesosphere.sdk.scheduler.DefaultScheduler;
 import com.mesosphere.sdk.scheduler.EnvStore;
 import com.mesosphere.sdk.scheduler.FrameworkConfig;
@@ -52,7 +53,12 @@ public class Main {
             LOGGER.info("Adding job: {}", serviceSpec.getName());
             client.putJob(DefaultScheduler.newBuilder(serviceSpec, schedulerConfig, queueRunner.getPersister())
                     .setPlansFrom(rawServiceSpec)
-                    .setMultiServiceFrameworkConfig(frameworkConfig)
+                    // Jobs-related customizations:
+                    // - In ZK, store data under "dcos-service-<fwkName>/Services/<jobName>"
+                    .setStorageNamespace(serviceSpec.getName())
+                    // - Config templates are served by JobsArtifactResource rather than default ArtifactResource
+                    .setTemplateUrlFactory(JobsArtifactResource.getUrlFactory(
+                            frameworkConfig.getFrameworkName(), serviceSpec.getName()))
                     .build());
         }
 

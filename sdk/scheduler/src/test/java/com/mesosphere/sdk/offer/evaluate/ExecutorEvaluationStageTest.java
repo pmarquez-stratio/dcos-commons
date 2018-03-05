@@ -1,5 +1,6 @@
 package com.mesosphere.sdk.offer.evaluate;
 
+import com.mesosphere.sdk.http.endpoints.ArtifactResource;
 import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.offer.MesosResourcePool;
 import com.mesosphere.sdk.scheduler.plan.PodInstanceRequirement;
@@ -58,7 +59,7 @@ public class ExecutorEvaluationStageTest extends OfferEvaluatorTestBase {
                                 stateStore.fetchTasks(),
                                 frameworkStore.fetchFrameworkId().get(),
                                 true,
-                                Optional.empty(),
+                                ArtifactResource.getUrlFactory(TestConstants.SERVICE_NAME),
                                 Collections.emptyMap()));
         Assert.assertFalse(outcome.isPassing());
     }
@@ -102,7 +103,7 @@ public class ExecutorEvaluationStageTest extends OfferEvaluatorTestBase {
                                 stateStore.fetchTasks(),
                                 frameworkStore.fetchFrameworkId().get(),
                                 false,
-                                Optional.empty(),
+                                ArtifactResource.getUrlFactory(TestConstants.SERVICE_NAME),
                                 Collections.emptyMap()));
         Assert.assertFalse(outcome.isPassing());
     }
@@ -145,7 +146,7 @@ public class ExecutorEvaluationStageTest extends OfferEvaluatorTestBase {
                         stateStore.fetchTasks(),
                         frameworkStore.fetchFrameworkId().get(),
                         true,
-                        Optional.empty(),
+                        ArtifactResource.getUrlFactory(TestConstants.SERVICE_NAME),
                         Collections.emptyMap());
         EvaluationOutcome outcome =
                 executorEvaluationStage.evaluate(resources, podInfoBuilder);
@@ -194,7 +195,7 @@ public class ExecutorEvaluationStageTest extends OfferEvaluatorTestBase {
                         stateStore.fetchTasks(),
                         frameworkStore.fetchFrameworkId().get(),
                         false,
-                        Optional.empty(),
+                        ArtifactResource.getUrlFactory(TestConstants.SERVICE_NAME),
                         Collections.emptyMap());
         EvaluationOutcome outcome =
                 executorEvaluationStage.evaluate(resources, podInfoBuilder);

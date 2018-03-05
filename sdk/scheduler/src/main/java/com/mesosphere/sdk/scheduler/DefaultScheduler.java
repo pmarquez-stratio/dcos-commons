@@ -4,6 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.TextFormat;
 import com.mesosphere.sdk.dcos.Capabilities;
 import com.mesosphere.sdk.http.endpoints.*;
+import com.mesosphere.sdk.http.queries.ArtifactQueries;
 import com.mesosphere.sdk.http.types.EndpointProducer;
 import com.mesosphere.sdk.http.types.StringPropertyDeserializer;
 import com.mesosphere.sdk.offer.*;
@@ -68,7 +69,6 @@ public class DefaultScheduler extends ServiceScheduler {
      */
     protected DefaultScheduler(
             ServiceSpec serviceSpec,
-            Optional<FrameworkConfig> multiServiceFrameworkConfig,
             SchedulerConfig schedulerConfig,
             Collection<Object> customResources,
             PlanCoordinator planCoordinator,
@@ -76,6 +76,7 @@ public class DefaultScheduler extends ServiceScheduler {
             FrameworkStore frameworkStore,
             StateStore stateStore,
             ConfigStore<ServiceSpec> configStore,
+            ArtifactQueries.TemplateUrlFactory templateUrlFactory,
             Map<String, EndpointProducer> customEndpointProducers) throws ConfigStoreException {
         super(serviceSpec.getName(), frameworkStore, stateStore, schedulerConfig, planCustomizer);
         this.serviceSpec = serviceSpec;
@@ -104,7 +105,7 @@ public class DefaultScheduler extends ServiceScheduler {
                         stateStore,
                         offerOutcomeTracker,
                         serviceSpec.getName(),
-                        multiServiceFrameworkConfig,
+                        templateUrlFactory,
                         configStore.getTargetConfig(),
                         schedulerConfig,
                         Capabilities.getInstance().supportsDefaultExecutor()),

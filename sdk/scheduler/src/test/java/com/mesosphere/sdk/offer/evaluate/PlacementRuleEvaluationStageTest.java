@@ -1,5 +1,6 @@
 package com.mesosphere.sdk.offer.evaluate;
 
+import com.mesosphere.sdk.http.endpoints.ArtifactResource;
 import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.offer.MesosResourcePool;
 import com.mesosphere.sdk.offer.TaskUtils;
@@ -53,7 +54,7 @@ public class PlacementRuleEvaluationStageTest extends DefaultCapabilitiesTestSui
                         Collections.emptyList(),
                         TestConstants.FRAMEWORK_ID,
                         true,
-                        Optional.empty(),
+                        ArtifactResource.getUrlFactory(TestConstants.SERVICE_NAME),
                         Collections.emptyMap()));
         Assert.assertTrue(outcome.isPassing());
 
@@ -92,7 +93,7 @@ public class PlacementRuleEvaluationStageTest extends DefaultCapabilitiesTestSui
                         Collections.emptyList(),
                         TestConstants.FRAMEWORK_ID,
                         true,
-                        Optional.empty(),
+                        ArtifactResource.getUrlFactory(TestConstants.SERVICE_NAME),
                         Collections.emptyMap()));
 
         Assert.assertFalse(outcome.isPassing());
