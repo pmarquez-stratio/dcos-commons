@@ -13,6 +13,7 @@ import com.mesosphere.sdk.scheduler.decommission.DecommissionPlanFactory;
 import com.mesosphere.sdk.scheduler.plan.*;
 import com.mesosphere.sdk.scheduler.recovery.FailureUtils;
 import com.mesosphere.sdk.scheduler.uninstall.UninstallRecorder;
+import com.mesosphere.sdk.scheduler.uninstall.UninstallScheduler;
 import com.mesosphere.sdk.specification.ServiceSpec;
 import com.mesosphere.sdk.state.*;
 import com.mesosphere.sdk.storage.Persister;
@@ -30,7 +31,7 @@ import java.util.stream.Collectors;
  */
 public class DefaultScheduler extends ServiceScheduler {
 
-    private final String serviceName;
+    private final ServiceSpec serviceSpec;
     private final Logger logger;
     private final ConfigStore<ServiceSpec> configStore;
     private final PlanCoordinator planCoordinator;
@@ -77,8 +78,8 @@ public class DefaultScheduler extends ServiceScheduler {
             ConfigStore<ServiceSpec> configStore,
             Map<String, EndpointProducer> customEndpointProducers) throws ConfigStoreException {
         super(serviceSpec.getName(), frameworkStore, stateStore, schedulerConfig, planCustomizer);
-        this.serviceName = serviceSpec.getName();
-        this.logger = LoggingUtils.getLogger(getClass(), serviceName);
+        this.serviceSpec = serviceSpec;
+        this.logger = LoggingUtils.getLogger(getClass(), serviceSpec.getName());
         this.configStore = configStore;
         this.planCoordinator = planCoordinator;
         this.customResources = customResources;
@@ -116,7 +117,7 @@ public class DefaultScheduler extends ServiceScheduler {
         resources.addAll(customResources);
         resources.add(new ArtifactResource(configStore));
         resources.add(new ConfigResource<>(configStore));
-        EndpointsResource endpointsResource = new EndpointsResource(stateStore, serviceName);
+        EndpointsResource endpointsResource = new EndpointsResource(stateStore, serviceSpec.getName());
         for (Map.Entry<String, EndpointProducer> entry : customEndpointProducers.entrySet()) {
             endpointsResource.setCustomEndpoint(entry.getKey(), entry.getValue());
         }
@@ -125,7 +126,7 @@ public class DefaultScheduler extends ServiceScheduler {
         resources.add(plansResource);
         resources.add(new DeprecatedPlanResource(plansResource));
         resources.add(new HealthResource(planCoordinator));
-        resources.add(new PodResource(stateStore, configStore, serviceName));
+        resources.add(new PodResource(stateStore, configStore, serviceSpec.getName()));
         resources.add(new StateResource(frameworkStore, stateStore, new StringPropertyDeserializer()));
         resources.add(new OfferOutcomeResource(offerOutcomeTracker));
         return resources;
@@ -199,7 +200,7 @@ public class DefaultScheduler extends ServiceScheduler {
     }
 
     @Override
-    protected List<OfferRecommendation> processOffers(List<Protos.Offer> offers, Collection<Step> steps) {
+    protected OfferResponse processOffers(Collection<Protos.Offer> offers, Collection<Step> steps) {
         // See which offers are useful to the plans, then omit the ones that shouldn't be launched.
         List<OfferRecommendation> offerRecommendations = getOfferRecommendations(logger, planScheduler, offers, steps);
 
@@ -207,7 +208,7 @@ public class DefaultScheduler extends ServiceScheduler {
                 offers.size(),
                 offers.size() == 1 ? "" : "s",
                 offerRecommendations.size(),
-                serviceName,
+                serviceSpec.getName(),
                 offerRecommendations.stream()
                         .map(rec -> rec.getOffer().getId().getValue())
                         .collect(Collectors.toList()));
@@ -217,12 +218,15 @@ public class DefaultScheduler extends ServiceScheduler {
             if (decommissionRecorder.isPresent()) {
                 decommissionRecorder.get().recordRecommendations(offerRecommendations);
             }
-            return offerRecommendations;
         } catch (Exception ex) {
-            // TODO(nickbp): If a subset of operations were recorded, things could still be left in a bad state.
+            // Note: If a subset of operations were recorded, things could still be left in a bad state. However, in
+            // practice any storage failure should have occurred in launchRecorder before any of the recommendations
+            // were recorded. So in practice this record operation should be 'roughly atomic'.
             logger.error("Failed to record offer operations, returning empty operations list", ex);
-            return Collections.emptyList();
+            offerRecommendations = Collections.emptyList();
         }
+
+        return OfferResponse.processed(offerRecommendations);
     }
 
     /**
@@ -232,7 +236,7 @@ public class DefaultScheduler extends ServiceScheduler {
      */
     @VisibleForTesting
     static List<OfferRecommendation> getOfferRecommendations(
-            Logger logger, PlanScheduler planScheduler, List<Protos.Offer> offers, Collection<Step> steps) {
+            Logger logger, PlanScheduler planScheduler, Collection<Protos.Offer> offers, Collection<Step> steps) {
         List<OfferRecommendation> filteredOfferRecommendations = new ArrayList<>();
         for (OfferRecommendation offerRecommendation : planScheduler.resourceOffers(offers, steps)) {
             if (offerRecommendation instanceof LaunchOfferRecommendation &&
@@ -257,7 +261,7 @@ public class DefaultScheduler extends ServiceScheduler {
      * that the resource is (about to be) cleaned.</li></ul>
      */
     @Override
-    public UnexpectedResourcesResponse getUnexpectedResources(List<Protos.Offer> unusedOffers) {
+    public UnexpectedResourcesResponse getUnexpectedResources(Collection<Protos.Offer> unusedOffers) {
         // First, determine which resource IDs we want to keep. Anything not listed here will be destroyed.
         final Set<String> resourceIdsToKeep;
         try {
@@ -337,5 +341,19 @@ public class DefaultScheduler extends ServiceScheduler {
                 logger.warn("Unable to store network info for status update: " + status, e);
             }
         }
+    }
+
+    /**
+     * Creates a new {@link UninstallScheduler} based on the local components.
+     * This is used to uninstall a service without restarting the framework scheduler process.
+     */
+    public UninstallScheduler toUninstallScheduler() {
+        return new UninstallScheduler(
+                this.serviceSpec,
+                this.frameworkStore,
+                this.stateStore,
+                this.configStore,
+                this.schedulerConfig,
+                this.planCustomizer);
     }
 }

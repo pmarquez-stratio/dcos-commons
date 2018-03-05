@@ -4,7 +4,6 @@ import com.mesosphere.sdk.scheduler.DefaultScheduler;
 import com.mesosphere.sdk.scheduler.EnvStore;
 import com.mesosphere.sdk.scheduler.FrameworkConfig;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
-import com.mesosphere.sdk.scheduler.ServiceScheduler;
 import com.mesosphere.sdk.specification.DefaultServiceSpec;
 import com.mesosphere.sdk.specification.ServiceSpec;
 import com.mesosphere.sdk.specification.yaml.RawServiceSpec;
@@ -29,7 +28,7 @@ public class Main {
         EnvStore envStore = EnvStore.fromEnv();
         SchedulerConfig schedulerConfig = SchedulerConfig.fromEnvStore(envStore);
         FrameworkConfig frameworkConfig = FrameworkConfig.fromEnvStore(envStore);
-        JobsEventClient client = new JobsEventClient();
+        JobsEventClient client = new JobsEventClient(schedulerConfig);
 
         // First initialize the QueueRunner to get the (cached) persister that will be reused by individual jobs
         // (within their own namespaces)
@@ -51,12 +50,10 @@ public class Main {
                     .setMultiServiceFrameworkConfig(frameworkConfig)
                     .build();
             LOGGER.info("Adding job: {}", serviceSpec.getName());
-            ServiceScheduler jobScheduler =
-                    DefaultScheduler.newBuilder(serviceSpec, schedulerConfig, queueRunner.getPersister())
+            client.putJob(DefaultScheduler.newBuilder(serviceSpec, schedulerConfig, queueRunner.getPersister())
                     .setPlansFrom(rawServiceSpec)
                     .setMultiServiceFrameworkConfig(frameworkConfig)
-                    .build();
-            client.putJob(serviceSpec.getName(), jobScheduler);
+                    .build());
         }
 
         // Now run the queue.

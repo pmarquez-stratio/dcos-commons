@@ -58,6 +58,7 @@ public class UninstallPlanBuilder {
         this.logger = LoggingUtils.getLogger(getClass(), serviceSpec.getName());
 
         // If there is no framework ID, wipe ZK and produce an empty COMPLETE plan
+        // TODO(nickbp): UNINSTALL Move this upstream into the framework level
         if (!frameworkStore.fetchFrameworkId().isPresent()) {
             logger.info("Framework ID is unset. Clearing persisted data and using an empty completed plan.");
             try {
@@ -138,6 +139,7 @@ public class UninstallPlanBuilder {
 
         // Finally, we unregister the framework from Mesos.
         // We don't have access to the SchedulerDriver yet. That will be set via setSchedulerDriver() below.
+        // TODO(nickbp): UNINSTALL Move this upstream into the framework level
         phases.add(new DefaultPhase(
                 DEREGISTER_PHASE,
                 Collections.singletonList(new DeregisterStep(frameworkStore)),

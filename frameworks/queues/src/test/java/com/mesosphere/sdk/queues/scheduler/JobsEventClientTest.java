@@ -14,205 +14,274 @@ import org.mockito.stubbing.Answer;
 
 import com.mesosphere.sdk.scheduler.ServiceScheduler;
 import com.mesosphere.sdk.offer.CommonIdUtils;
-import com.mesosphere.sdk.scheduler.MesosEventClient;
+import com.mesosphere.sdk.offer.Constants;
+import com.mesosphere.sdk.offer.OfferRecommendation;
+import com.mesosphere.sdk.offer.ReserveOfferRecommendation;
 import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
 import com.mesosphere.sdk.scheduler.MesosEventClient.StatusResponse;
+import com.mesosphere.sdk.scheduler.SchedulerConfig;
 
 import static org.mockito.Mockito.*;
 
-import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class JobsEventClientTest {
 
-    private static final Answer<OfferResponse> DROP_FIRST_OFFER = new Answer<OfferResponse>() {
+    private static final Answer<OfferResponse> CONSUME_FIRST_OFFER = new Answer<OfferResponse>() {
         @Override
         public OfferResponse answer(InvocationOnMock invocation) throws Throwable {
-            List<Offer> offers = new ArrayList<>();
-            offers.addAll(getOffersArgument(invocation));
-            if (!offers.isEmpty()) {
-                offers.remove(0);
+            List<Offer> offers = getOffersArgument(invocation);
+            if (offers.isEmpty()) {
+                return OfferResponse.processed(Collections.emptyList());
             }
-            return OfferResponse.processed(Collections.emptyList(), offers);
+            return OfferResponse.processed(Collections.singletonList(
+                    new ReserveOfferRecommendation(offers.get(0), getUnreservedCpus(3))));
         }
     };
 
-    private static final Answer<OfferResponse> DROP_LAST_OFFER = new Answer<OfferResponse>() {
+    private static final Answer<OfferResponse> CONSUME_LAST_OFFER = new Answer<OfferResponse>() {
         @Override
         public OfferResponse answer(InvocationOnMock invocation) throws Throwable {
-            List<Offer> offers = new ArrayList<>();
-            offers.addAll(getOffersArgument(invocation));
-            if (!offers.isEmpty()) {
-                offers.remove(offers.size() - 1);
+            List<Offer> offers = getOffersArgument(invocation);
+            if (offers.isEmpty()) {
+                return OfferResponse.processed(Collections.emptyList());
             }
-            return OfferResponse.processed(Collections.emptyList(), offers);
+            return OfferResponse.processed(Collections.singletonList(
+                    new ReserveOfferRecommendation(offers.get(offers.size() - 1), getUnreservedCpus(5))));
         }
     };
 
     private static final Answer<OfferResponse> NO_CHANGES = new Answer<OfferResponse>() {
         @Override
         public OfferResponse answer(InvocationOnMock invocation) throws Throwable {
-            return OfferResponse.processed(Collections.emptyList(), getOffersArgument(invocation));
+            return OfferResponse.processed(Collections.emptyList());
         }
     };
 
     private static final Answer<OfferResponse> OFFER_NOT_READY = new Answer<OfferResponse>() {
         @Override
         public OfferResponse answer(InvocationOnMock invocation) throws Throwable {
-            return OfferResponse.notReady(getOffersArgument(invocation));
+            return OfferResponse.notReady(Collections.emptyList());
         }
     };
 
     @Mock private ServiceScheduler mockClient1;
     @Mock private ServiceScheduler mockClient2;
     @Mock private ServiceScheduler mockClient3;
+    @Mock private ServiceScheduler mockClient4;
+    @Mock private ServiceScheduler mockClient5;
+    @Mock private ServiceScheduler mockClient6;
+    @Mock private ServiceScheduler mockClient7;
+    @Mock private ServiceScheduler mockClient8;
+    @Mock private ServiceScheduler mockClient9;
+    @Mock private SchedulerConfig mockSchedulerConfig;
 
     private JobsEventClient client;
 
     @Before
     public void beforeEach() {
         MockitoAnnotations.initMocks(this);
-        client = new JobsEventClient();
+        when(mockClient1.getName()).thenReturn("1");
+        when(mockClient2.getName()).thenReturn("2");
+        when(mockClient3.getName()).thenReturn("3");
+        when(mockClient4.getName()).thenReturn("4");
+        when(mockClient5.getName()).thenReturn("5");
+        when(mockClient6.getName()).thenReturn("6");
+        when(mockClient7.getName()).thenReturn("7");
+        when(mockClient8.getName()).thenReturn("8");
+        when(mockClient9.getName()).thenReturn("9");
+        client = new JobsEventClient(mockSchedulerConfig);
     }
 
     @Test
-    public void putRemoveClients() {
-        Assert.assertNull(client.removeJob("1"));
-
-        client.putJob("1", mockClient1);
-        Assert.assertSame(mockClient1, client.removeJob("1"));
-        Assert.assertNull(client.removeJob("1"));
-
-        client.putJob("2", mockClient2);
+    public void putClients() {
+        client.putJob(mockClient1);
+        client.putJob(mockClient2);
         try {
-            client.putJob("2", mockClient1);
+            client.putJob(mockClient2);
             Assert.fail("Expected exception: duplicate key");
         } catch (IllegalArgumentException e) {
             // expected
         }
-        Assert.assertNull(client.removeJob("1"));
-        // Client should still have the original value that was successfully added:
-        Assert.assertSame(mockClient2, client.removeJob("2"));
-        Assert.assertNull(client.removeJob("2"));
     }
 
     @Test
     public void offerNoClients() {
-        // Empty offers: All clients should have been pinged regardless
+        // No offers
         OfferResponse response = client.offers(Collections.emptyList());
-        Assert.assertEquals(MesosEventClient.Result.FAILED, response.result);
-        Assert.assertTrue(response.unusedOffers.isEmpty());
+        Assert.assertEquals(OfferResponse.Result.NOT_READY, response.result);
+        Assert.assertTrue(response.recommendations.isEmpty());
 
-        // Seven offers: Only the middle offer is left at the end.
-        List<Protos.Offer> offers = Arrays.asList(getOffer(1), getOffer(2), getOffer(3));
-        response = client.offers(offers);
-        Assert.assertEquals(MesosEventClient.Result.FAILED, response.result);
-        Assert.assertEquals(offers, response.unusedOffers);
+        // Some offers
+        response = client.offers(Arrays.asList(getOffer(1), getOffer(2), getOffer(3)));
+        Assert.assertEquals(OfferResponse.Result.NOT_READY, response.result);
+        Assert.assertTrue(response.recommendations.isEmpty());
     }
 
-    @Ignore("TODO")
+    @Ignore("TODO(nickbp)")
     @Test
     public void writeUnexpectedResourcesTests() {
-        Assert.fail("TODO tests for getUnexpectedResources");
+        // TODO(nickbp) tests for getUnexpectedResources");
+    }
+
+    @Ignore("TODO(nickbp)")
+    @Test
+    public void writeUninstalledServiceTests() {
+        // TODO(nickbp) tests for uninstalled service (FINISHED for offers)");
     }
 
     @Test
     public void offerPruning() {
-        // Client 1,4,7: returns all but the first offer
-        // Client 2,5,8: returns all but the last offer
+        // Client 1,4,7: consumes the first offer
+        // Client 2,5,8: consumes the last offer
         // Client 3,6,9: no change to offers
-        when(mockClient1.offers(any())).then(DROP_FIRST_OFFER);
-        when(mockClient2.offers(any())).then(DROP_LAST_OFFER);
+        when(mockClient1.offers(any())).then(CONSUME_FIRST_OFFER);
+        when(mockClient2.offers(any())).then(CONSUME_LAST_OFFER);
         when(mockClient3.offers(any())).then(NO_CHANGES);
+        when(mockClient4.offers(any())).then(CONSUME_FIRST_OFFER);
+        when(mockClient5.offers(any())).then(CONSUME_LAST_OFFER);
+        when(mockClient6.offers(any())).then(NO_CHANGES);
+        when(mockClient7.offers(any())).then(CONSUME_FIRST_OFFER);
+        when(mockClient8.offers(any())).then(CONSUME_LAST_OFFER);
+        when(mockClient9.offers(any())).then(NO_CHANGES);
         client
-                .putJob("1", mockClient1)
-                .putJob("2", mockClient2)
-                .putJob("3", mockClient3)
-                .putJob("4", mockClient1)
-                .putJob("5", mockClient2)
-                .putJob("6", mockClient3)
-                .putJob("7", mockClient1)
-                .putJob("8", mockClient2)
-                .putJob("9", mockClient3);
+                .putJob(mockClient1)
+                .putJob(mockClient2)
+                .putJob(mockClient3)
+                .putJob(mockClient4)
+                .putJob(mockClient5)
+                .putJob(mockClient6)
+                .putJob(mockClient7)
+                .putJob(mockClient8)
+                .putJob(mockClient9);
 
         // Empty offers: All clients should have been pinged regardless
         OfferResponse response = client.offers(Collections.emptyList());
-        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
-        Assert.assertTrue(response.unusedOffers.isEmpty());
-        verify(mockClient1, times(3)).offers(Collections.emptyList());
-        verify(mockClient2, times(3)).offers(Collections.emptyList());
-        verify(mockClient3, times(3)).offers(Collections.emptyList());
+        Assert.assertEquals(OfferResponse.Result.PROCESSED, response.result);
+        Assert.assertTrue(response.recommendations.isEmpty());
+        verify(mockClient1).offers(Collections.emptyList());
+        verify(mockClient2).offers(Collections.emptyList());
+        verify(mockClient3).offers(Collections.emptyList());
+        verify(mockClient4).offers(Collections.emptyList());
+        verify(mockClient5).offers(Collections.emptyList());
+        verify(mockClient6).offers(Collections.emptyList());
+        verify(mockClient7).offers(Collections.emptyList());
+        verify(mockClient8).offers(Collections.emptyList());
+        verify(mockClient9).offers(Collections.emptyList());
 
         // Seven offers: Only the middle offer is left at the end.
         Protos.Offer middleOffer = getOffer(4);
-        response = client.offers(Arrays.asList(
+        Collection<Protos.Offer> offers = Arrays.asList(
                 getOffer(1), getOffer(2), getOffer(3),
                 middleOffer,
-                getOffer(5), getOffer(6), getOffer(7)));
-        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
-        Assert.assertEquals(1, response.unusedOffers.size());
-        Assert.assertEquals(middleOffer, response.unusedOffers.get(0));
-        verify(mockClient1, times(6)).offers(any());
-        verify(mockClient2, times(6)).offers(any());
-        verify(mockClient3, times(6)).offers(any());
+                getOffer(5), getOffer(6), getOffer(7));
+        response = client.offers(offers);
+        Assert.assertEquals(OfferResponse.Result.PROCESSED, response.result);
+        Set<Integer> expectedConsumedOffers = new HashSet<>(Arrays.asList(1, 2, 3, 5, 6, 7));
+        Assert.assertEquals(expectedConsumedOffers.size(), response.recommendations.size());
+        for (OfferRecommendation rec : response.recommendations) {
+            Assert.assertTrue(rec.getOffer().getId().getValue(),
+                    expectedConsumedOffers.contains(Integer.parseInt(rec.getOffer().getId().getValue())));
+        }
+        // Verify that offers are consumed in the order we would expect:
+        verify(mockClient1).offers(Arrays.asList(
+                getOffer(1), getOffer(2), getOffer(3), middleOffer, getOffer(5), getOffer(6), getOffer(7)));
+        verify(mockClient2).offers(Arrays.asList(
+                getOffer(2), getOffer(3), middleOffer, getOffer(5), getOffer(6), getOffer(7))); // 1 ate first
+        verify(mockClient3).offers(Arrays.asList(
+                getOffer(2), getOffer(3), middleOffer, getOffer(5), getOffer(6))); // 2 ate last
+        verify(mockClient4).offers(Arrays.asList(
+                getOffer(2), getOffer(3), middleOffer, getOffer(5), getOffer(6))); // no change by 3
+        verify(mockClient5).offers(Arrays.asList(
+                getOffer(3), middleOffer, getOffer(5), getOffer(6))); // 4 ate first
+        verify(mockClient6).offers(Arrays.asList(
+                getOffer(3), middleOffer, getOffer(5))); // 5 ate last
+        verify(mockClient7).offers(Arrays.asList(
+                getOffer(3), middleOffer, getOffer(5))); // no change by 6
+        verify(mockClient8).offers(Arrays.asList(
+                middleOffer, getOffer(5))); // 7 ate first
+        verify(mockClient9).offers(Arrays.asList(
+                middleOffer)); // 8 ate last
     }
 
     @Test
     public void offerSomeClientsNotReady() {
-        // All three clients: Not ready
+        // One client: Not ready
         when(mockClient1.offers(any())).then(NO_CHANGES);
         when(mockClient2.offers(any())).then(OFFER_NOT_READY);
+        when(mockClient3.offers(any())).then(NO_CHANGES);
         client
-                .putJob("1", mockClient1)
-                .putJob("2", mockClient2)
-                .putJob("3", mockClient1);
+                .putJob(mockClient1)
+                .putJob(mockClient2)
+                .putJob(mockClient3);
 
         // Empty offers: All clients should have been pinged regardless
         OfferResponse response = client.offers(Collections.emptyList());
-        Assert.assertEquals(MesosEventClient.Result.FAILED, response.result);
-        Assert.assertTrue(response.unusedOffers.isEmpty());
-        verify(mockClient1, times(2)).offers(Collections.emptyList());
-        verify(mockClient2, times(1)).offers(Collections.emptyList());
+        Assert.assertEquals(OfferResponse.Result.NOT_READY, response.result);
+        Assert.assertTrue(response.recommendations.isEmpty());
+        verify(mockClient1).offers(Collections.emptyList());
+        verify(mockClient2).offers(Collections.emptyList());
+        verify(mockClient3).offers(Collections.emptyList());
 
         // Three offers: All clients should have been pinged with the same offers.
         List<Protos.Offer> offers = Arrays.asList(getOffer(1), getOffer(2), getOffer(3));
         response = client.offers(offers);
-        Assert.assertEquals(MesosEventClient.Result.FAILED, response.result);
-        Assert.assertEquals(offers, response.unusedOffers);
-        verify(mockClient1, times(2)).offers(offers);
-        verify(mockClient2, times(1)).offers(offers);
+        Assert.assertEquals(OfferResponse.Result.NOT_READY, response.result);
+        Assert.assertTrue(response.recommendations.isEmpty());
+        verify(mockClient1).offers(offers);
+        verify(mockClient2).offers(offers);
+        verify(mockClient3).offers(offers);
     }
 
     @Test
     public void statusUnknown() {
-        // Client 1,2,3: unknown task
+        // Client 2: unknown task, Clients 1 and 3: no interaction
         when(mockClient2.status(any())).thenReturn(StatusResponse.unknownTask());
         client
-                .putJob("1", mockClient1)
-                .putJob("2", mockClient2)
-                .putJob("3", mockClient1);
+                .putJob(mockClient1)
+                .putJob(mockClient2)
+                .putJob(mockClient3);
 
         Protos.TaskStatus status = getStatus("2");
-        Assert.assertEquals(MesosEventClient.Result.FAILED, client.status(status).result);
-        verifyZeroInteractions(mockClient1); // Clients "1" and "3" left alone
+        Assert.assertEquals(StatusResponse.Result.UNKNOWN_TASK, client.status(status).result);
+        verify(mockClient1, never()).status(any());
         verify(mockClient2, times(1)).status(status);
+        verify(mockClient3, never()).status(any());
     }
+
     @Test
     public void statusProcessed() {
         when(mockClient1.status(any())).thenReturn(StatusResponse.unknownTask());
-        when(mockClient2.status(any())).thenReturn(StatusResponse.processed());
+        when(mockClient2.status(any())).thenReturn(StatusResponse.unknownTask());
+        when(mockClient3.status(any())).thenReturn(StatusResponse.processed());
+        when(mockClient4.status(any())).thenReturn(StatusResponse.unknownTask());
         client
-                .putJob("1", mockClient1)
-                .putJob("2", mockClient1)
-                .putJob("3", mockClient2)
-                .putJob("4", mockClient1);
+                .putJob(mockClient1)
+                .putJob(mockClient2)
+                .putJob(mockClient3)
+                .putJob(mockClient4);
 
         Protos.TaskStatus status = getStatus("3");
-        Assert.assertEquals(MesosEventClient.Result.PROCESSED, client.status(status).result);
-        verifyZeroInteractions(mockClient1); // Clients "1", "2", "3" left alone
-        verify(mockClient2, times(1)).status(status);
+        Assert.assertEquals(StatusResponse.Result.PROCESSED, client.status(status).result);
+        verify(mockClient1, never()).status(any());
+        verify(mockClient2, never()).status(any());
+        verify(mockClient3, times(1)).status(status);
+        verify(mockClient4, never()).status(any());
+    }
+
+    @SuppressWarnings("deprecation")
+    private static Protos.Resource getUnreservedCpus(double cpus) {
+        Protos.Resource.Builder resBuilder = Protos.Resource.newBuilder()
+                .setName("cpus")
+                .setType(Protos.Value.Type.SCALAR)
+                .setRole(Constants.ANY_ROLE);
+        resBuilder.getScalarBuilder().setValue(cpus);
+        return resBuilder.build();
     }
 
     private static Protos.TaskStatus getStatus(String clientName) {

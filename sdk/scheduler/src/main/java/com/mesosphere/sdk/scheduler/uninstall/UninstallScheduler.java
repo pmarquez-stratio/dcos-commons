@@ -42,9 +42,9 @@ public class UninstallScheduler extends ServiceScheduler {
     private Collection<Object> resources = Collections.emptyList();
 
     /**
-     * Creates a new {@link UninstallScheduler} based on the provided API port and initialization timeout, and a
-     * {@link StateStore}. The {@link UninstallScheduler} builds an uninstall {@link Plan} which will clean up
-     * the service's reservations, TLS artifacts, zookeeper data, and any other artifacts from running the service.
+     * Creates a new {@link UninstallScheduler} using the provided components. The {@link UninstallScheduler} builds an
+     * uninstall {@link Plan} which will clean up the service's reservations, TLS artifacts, zookeeper data, and any
+     * other artifacts from running the service.
      */
     public UninstallScheduler(
             ServiceSpec serviceSpec,
@@ -93,6 +93,7 @@ public class UninstallScheduler extends ServiceScheduler {
 
         this.uninstallPlanManager = DefaultPlanManager.createProceeding(deployPlan);
         PlansResource plansResource = new PlansResource(Collections.singletonList(uninstallPlanManager));
+        // TODO(nickbp): UNINSTALL Need an endpoint (plans,health?) so that cosmos knows when to remove the marathon app
         this.resources = Arrays.asList(
                 plansResource,
                 new DeprecatedPlanResource(plansResource),
@@ -145,7 +146,7 @@ public class UninstallScheduler extends ServiceScheduler {
     }
 
     @Override
-    protected List<OfferRecommendation> processOffers(List<Protos.Offer> offers, Collection<Step> steps) {
+    protected OfferResponse processOffers(Collection<Protos.Offer> offers, Collection<Step> steps) {
         // Get candidate steps to be scheduled
         if (!steps.isEmpty()) {
             logger.info("Attempting to process {} candidates from uninstall plan: {}",
@@ -153,10 +154,15 @@ public class UninstallScheduler extends ServiceScheduler {
             steps.forEach(Step::start);
         }
 
-        // No recommendations. Upstream should invoke the cleaner against any unexpected resources in unclaimed offers
-        // (including the ones that apply to our service), and then notify us via clean() so that we can record the ones
-        // that apply to us.
-        return Collections.emptyList();
+        if (uninstallPlanManager.getPlan().isComplete()) {
+            // Uninstall of the service has completed, let upstream know.
+            return OfferResponse.finished();
+        } else {
+            // No recommendations. Upstream should invoke the cleaner against any unexpected resources in unclaimed
+            // offers (including the ones that apply to our service), and then notify us via clean() so that we can
+            // record the ones that apply to us.
+            return OfferResponse.processed(Collections.emptyList());
+        }
     }
 
     /**
@@ -164,7 +170,7 @@ public class UninstallScheduler extends ServiceScheduler {
      * The {@link UninstallScheduler} just keeps track of them on its 'checklist' as they are removed.
      */
     @Override
-    public UnexpectedResourcesResponse getUnexpectedResources(List<Protos.Offer> unusedOffers) {
+    public UnexpectedResourcesResponse getUnexpectedResources(Collection<Protos.Offer> unusedOffers) {
         Collection<OfferResources> unexpected = unusedOffers.stream()
                 .map(offer -> new OfferResources(offer).addAll(offer.getResourcesList().stream()
                         // Omit unreserved resources:

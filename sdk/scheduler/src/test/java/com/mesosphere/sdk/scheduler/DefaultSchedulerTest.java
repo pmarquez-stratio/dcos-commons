@@ -6,6 +6,7 @@ import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.offer.LaunchOfferRecommendation;
 import com.mesosphere.sdk.offer.LoggingUtils;
 import com.mesosphere.sdk.offer.OfferRecommendation;
+import com.mesosphere.sdk.offer.OfferUtils;
 import com.mesosphere.sdk.offer.taskdata.TaskLabelWriter;
 import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
 import com.mesosphere.sdk.scheduler.MesosEventClient.UnexpectedResourcesResponse;
@@ -194,8 +195,7 @@ public class DefaultSchedulerTest {
         verify(mockSchedulerDriver, times(1)).reconcileTasks(any());
 
         OfferResponse offerResponse = defaultScheduler.offers(Collections.emptyList());
-        Assert.assertEquals(MesosEventClient.Result.PROCESSED, offerResponse.result);
-        Assert.assertTrue(offerResponse.unusedOffers.isEmpty());
+        Assert.assertEquals(OfferResponse.Result.PROCESSED, offerResponse.result);
         Assert.assertTrue(offerResponse.recommendations.isEmpty());
     }
 
@@ -271,12 +271,11 @@ public class DefaultSchedulerTest {
         Step stepTaskA0 = plan.getChildren().get(0).getChildren().get(0);
         Assert.assertTrue(stepTaskA0.isPending());
 
-        // Offer sufficient Resource and wait for its acceptance
+        // Offer sufficient Resources and wait for its acceptance
         Protos.Offer offer1 = getSufficientOfferForTaskA();
         OfferResponse response = defaultScheduler.offers(Arrays.asList(offer1));
-        Assert.assertTrue(response.unusedOffers.isEmpty());
         Assert.assertEquals(8, response.recommendations.size());
-        Assert.assertEquals(offer1, response.recommendations.get(0).getOffer());
+        Assert.assertEquals(offer1, response.recommendations.iterator().next().getOffer());
 
         Protos.TaskID launchedTaskId = getTaskId(response.recommendations);
 
@@ -327,10 +326,11 @@ public class DefaultSchedulerTest {
                 .addResources(mem)
                 .build();
 
-        response = defaultScheduler.offers(Arrays.asList(offerA, offerB, offerC));
+        Collection<Protos.Offer> offers = Arrays.asList(offerA, offerB, offerC);
+        response = defaultScheduler.offers(offers);
 
         // Only offerA/offerB are consumed:
-        Assert.assertEquals(Arrays.asList(offerC), response.unusedOffers);
+        Assert.assertEquals(Arrays.asList(offerC), OfferUtils.filterOutAcceptedOffers(offers, response.recommendations));
         Assert.assertEquals(new HashSet<>(Arrays.asList(offerA.getId(), offerB.getId())),
                 response.recommendations.stream().map(r -> r.getOffer().getId()).distinct().collect(Collectors.toSet()));
 
@@ -358,9 +358,8 @@ public class DefaultSchedulerTest {
         // Offer sufficient Resource and wait for its acceptance
         Protos.Offer offer1 = getSufficientOfferForTaskA();
         OfferResponse response = defaultScheduler.offers(Arrays.asList(offer1));
-        Assert.assertTrue(response.unusedOffers.isEmpty());
         Assert.assertEquals(8, response.recommendations.size());
-        Assert.assertEquals(offer1, response.recommendations.get(0).getOffer());
+        Assert.assertEquals(offer1, response.recommendations.iterator().next().getOffer());
         Protos.TaskID launchedTaskId = getTaskId(response.recommendations);
 
         // Send TASK_RUNNING status after the task is Starting (Mesos has been sent Launch)
@@ -391,9 +390,11 @@ public class DefaultSchedulerTest {
         Protos.Offer insufficientOffer = OfferTestUtils.getCompleteOffer(neededAdditionalResource);
 
         // First attempt doesn't do anything because reconciliation hadn't completed yet
-        response = defaultScheduler.offers(Arrays.asList(insufficientOffer));
-        Assert.assertEquals(MesosEventClient.Result.FAILED, response.result);
-        Assert.assertEquals(insufficientOffer, response.unusedOffers.get(0));
+        Collection<Protos.Offer> offers = Arrays.asList(insufficientOffer);
+        response = defaultScheduler.offers(offers);
+        Assert.assertEquals(OfferResponse.Result.NOT_READY, response.result);
+        Assert.assertEquals(Arrays.asList(insufficientOffer),
+                OfferUtils.filterOutAcceptedOffers(offers, response.recommendations));
         verify(mockSchedulerDriver, times(0)).killTask(any());
         Assert.assertEquals(Status.PENDING, stepTaskA0.getStatus());
 
@@ -405,9 +406,10 @@ public class DefaultSchedulerTest {
         verify(mockSchedulerDriver, times(1)).reconcileTasks(Collections.emptyList());
 
         // Second attempt after reconciliation results in triggering task relaunch
-        response = defaultScheduler.offers(Arrays.asList(insufficientOffer));
-        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
-        Assert.assertEquals(insufficientOffer, response.unusedOffers.get(0));
+        response = defaultScheduler.offers(offers);
+        Assert.assertEquals(OfferResponse.Result.PROCESSED, response.result);
+        Assert.assertEquals(Arrays.asList(insufficientOffer),
+                OfferUtils.filterOutAcceptedOffers(offers, response.recommendations));
         verify(mockSchedulerDriver, times(1)).killTask(launchedTaskId);
         Assert.assertEquals(Status.PREPARED, stepTaskA0.getStatus());
 
@@ -418,11 +420,10 @@ public class DefaultSchedulerTest {
 
         Protos.Offer expectedOffer = OfferTestUtils.getCompleteOffer(expectedResources);
         response = defaultScheduler.offers(Arrays.asList(expectedOffer));
-        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
-        Assert.assertTrue(response.unusedOffers.isEmpty());
+        Assert.assertEquals(OfferResponse.Result.PROCESSED, response.result);
         Assert.assertEquals(Arrays.asList(Protos.Offer.Operation.Type.RESERVE, Protos.Offer.Operation.Type.LAUNCH_GROUP),
                 response.recommendations.stream().map(r -> r.getOperation().getType()).collect(Collectors.toList()));
-        Assert.assertEquals(expectedOffer, response.recommendations.get(0).getOffer());
+        Assert.assertEquals(expectedOffer, response.recommendations.iterator().next().getOffer());
         Assert.assertTrue(stepTaskA0.isStarting());
         Assert.assertEquals(0, getRecoveryPlan().getChildren().size());
 
@@ -581,7 +582,7 @@ public class DefaultSchedulerTest {
         // Verify that the task's resources are currently expected:
         UnexpectedResourcesResponse response =
                 defaultScheduler.getUnexpectedResources(OfferTestUtils.getOffers(taskInfo.getResourcesList()));
-        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
+        Assert.assertEquals(UnexpectedResourcesResponse.Result.PROCESSED, response.result);
         Assert.assertTrue(response.offerResources.isEmpty());
 
         // Mark the task as permanently failed:
@@ -592,7 +593,7 @@ public class DefaultSchedulerTest {
 
         // Verify that the task's resources are no longer expected:
         response = defaultScheduler.getUnexpectedResources(OfferTestUtils.getOffers(taskInfo.getResourcesList()));
-        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
+        Assert.assertEquals(UnexpectedResourcesResponse.Result.PROCESSED, response.result);
         Assert.assertEquals(1, response.offerResources.size());
         Assert.assertEquals(taskInfo.getResourcesList(), response.offerResources.iterator().next().getResources());
     }
@@ -609,7 +610,7 @@ public class DefaultSchedulerTest {
         // Verify that the task's resources are currently expected:
         UnexpectedResourcesResponse response =
                 defaultScheduler.getUnexpectedResources(OfferTestUtils.getOffers(taskInfo.getResourcesList()));
-        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
+        Assert.assertEquals(UnexpectedResourcesResponse.Result.PROCESSED, response.result);
         Assert.assertTrue(response.offerResources.isEmpty());
 
         // Mark the task as decommissioning:
@@ -617,7 +618,7 @@ public class DefaultSchedulerTest {
 
         // Verify that the task's resources are no longer expected:
         response = defaultScheduler.getUnexpectedResources(OfferTestUtils.getOffers(taskInfo.getResourcesList()));
-        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
+        Assert.assertEquals(UnexpectedResourcesResponse.Result.PROCESSED, response.result);
         Assert.assertEquals(1, response.offerResources.size());
         Assert.assertEquals(taskInfo.getResourcesList(), response.offerResources.iterator().next().getResources());
 
@@ -748,10 +749,11 @@ public class DefaultSchedulerTest {
 
         // Offer sufficient Resource and wait for its acceptance
         OfferResponse response = defaultScheduler.offers(Arrays.asList(offer));
-        Assert.assertTrue(response.unusedOffers.isEmpty());
-        Assert.assertEquals(offer, response.recommendations.get(0).getOffer());
+        for (OfferRecommendation rec : response.recommendations) {
+            Assert.assertEquals(offer, rec.getOffer());
+        }
 
-        // Verify 2 Reserve and 1 Launch Operations were executed
+        // Verify operations:
         Assert.assertEquals(8, response.recommendations.size());
         Assert.assertEquals(6, countOperationType(Protos.Offer.Operation.Type.RESERVE, response.recommendations));
         Assert.assertEquals(1, countOperationType(Protos.Offer.Operation.Type.CREATE, response.recommendations));

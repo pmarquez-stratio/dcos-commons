@@ -35,7 +35,7 @@ public class PlanScheduler {
      *         requirements returned by the {@link Step}
      */
     public List<OfferRecommendation> resourceOffers(
-            final List<Protos.Offer> offers, final Collection<? extends Step> steps) {
+            final Collection<Protos.Offer> offers, final Collection<? extends Step> steps) {
         List<OfferRecommendation> allRecommendations = new ArrayList<>();
         List<Protos.Offer> availableOffers = new ArrayList<>(offers);
 

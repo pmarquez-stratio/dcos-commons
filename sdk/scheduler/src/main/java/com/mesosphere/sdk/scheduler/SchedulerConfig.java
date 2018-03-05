@@ -6,7 +6,6 @@ import org.apache.mesos.Protos.Credential;
 import org.bouncycastle.util.io.pem.PemReader;
 import org.json.JSONObject;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.auth0.jwt.algorithms.Algorithm;
 import com.mesosphere.sdk.dcos.DcosHttpClientBuilder;
@@ -15,6 +14,7 @@ import com.mesosphere.sdk.dcos.auth.CachedTokenProvider;
 import com.mesosphere.sdk.dcos.auth.TokenProvider;
 import com.mesosphere.sdk.dcos.clients.ServiceAccountIAMTokenClient;
 import com.mesosphere.sdk.generated.SDKBuildInfo;
+import com.mesosphere.sdk.offer.LoggingUtils;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class SchedulerConfig {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(SchedulerConfig.class);
+    private static final Logger LOGGER = LoggingUtils.getLogger(SchedulerConfig.class);
 
     /** Envvar to specify a custom amount of time to wait for the Scheduler API to come up during startup. */
     private static final String API_SERVER_TIMEOUT_S_ENV = "API_SERVER_TIMEOUT_S";

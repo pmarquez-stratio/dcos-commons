@@ -3,8 +3,6 @@ package com.mesosphere.sdk.scheduler;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.TextFormat;
 import com.mesosphere.sdk.offer.LoggingUtils;
-import com.mesosphere.sdk.offer.OfferRecommendation;
-import com.mesosphere.sdk.offer.OfferUtils;
 import com.mesosphere.sdk.reconciliation.Reconciler;
 import com.mesosphere.sdk.scheduler.plan.*;
 import com.mesosphere.sdk.scheduler.uninstall.UninstallScheduler;
@@ -36,7 +34,7 @@ public abstract class ServiceScheduler implements MesosEventClient {
     protected final SchedulerConfig schedulerConfig;
 
     private final AtomicBoolean started = new AtomicBoolean(false);
-    private final Optional<PlanCustomizer> planCustomizer;
+    protected final Optional<PlanCustomizer> planCustomizer;
 
     // These are all (re)assigned when the scheduler has (re)registered:
     private ReviveManager reviveManager;
@@ -57,6 +55,14 @@ public abstract class ServiceScheduler implements MesosEventClient {
         this.stateStore = stateStore;
         this.schedulerConfig = schedulerConfig;
         this.planCustomizer = planCustomizer;
+    }
+
+    /**
+     * Returns the service name for this service. If this is the only service in this framework, it's equivalent to the
+     * framework name.
+     */
+    public String getName() {
+        return serviceName;
     }
 
     /**
@@ -117,14 +123,14 @@ public abstract class ServiceScheduler implements MesosEventClient {
     }
 
     @Override
-    public OfferResponse offers(List<Protos.Offer> offers) {
+    public OfferResponse offers(Collection<Protos.Offer> offers) {
         /* Task Reconciliation must complete before any Tasks may be launched.  It ensures that a Scheduler and
          * Mesos have agreed upon the state of all Tasks of interest to the scheduler.
          * See also: http://mesos.apache.org/documentation/latest/reconciliation/ */
         reconciler.reconcile();
         if (!reconciler.isReconciled()) {
             logger.info("Not ready for offers: Waiting for task reconciliation to complete.");
-            return OfferResponse.notReady(offers);
+            return OfferResponse.notReady(Collections.emptyList());
         }
 
         // Get the current work
@@ -143,14 +149,12 @@ public abstract class ServiceScheduler implements MesosEventClient {
         logger.info("Processing {} offer{} against {} step{}:",
                 offers.size(), offers.size() == 1 ? "" : "s",
                 steps.size(), steps.size() == 1 ? "" : "s");
-        for (int i = 0; i < offers.size(); ++i) {
-            logger.info("  {}: {}", i + 1, TextFormat.shortDebugString(offers.get(i)));
+        int i = 0;
+        for (Protos.Offer offer : offers) {
+            logger.info("  {}: {}", ++i, TextFormat.shortDebugString(offer));
         }
 
-        List<OfferRecommendation> recommendations = processOffers(offers, steps);
-        List<Protos.Offer> unusedOffers = OfferUtils.filterOutAcceptedOffers(offers, recommendations);
-
-        return OfferResponse.processed(recommendations, unusedOffers);
+        return processOffers(offers, steps);
     }
 
     private static Set<Step> getInProgressSteps(PlanCoordinator planCoordinator) {
@@ -206,7 +210,7 @@ public abstract class ServiceScheduler implements MesosEventClient {
      * @param offers zero or more offers (zero may periodically be passed to 'turn the crank' on other processing)
      * @param steps candidate steps which had been returned by the {@link PlanCoordinator}
      */
-    protected abstract List<OfferRecommendation> processOffers(List<Protos.Offer> offers, Collection<Step> steps);
+    protected abstract OfferResponse processOffers(Collection<Protos.Offer> offers, Collection<Step> steps);
 
     /**
      * Invoked when Mesos has provided a task status to be processed.

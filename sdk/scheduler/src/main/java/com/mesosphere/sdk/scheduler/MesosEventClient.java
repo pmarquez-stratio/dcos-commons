@@ -2,7 +2,6 @@ package com.mesosphere.sdk.scheduler;
 
 import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
 import org.apache.mesos.Protos;
 
 import com.mesosphere.sdk.offer.OfferRecommendation;
@@ -11,109 +10,6 @@ import com.mesosphere.sdk.offer.OfferRecommendation;
  * Accepts events received from Mesos.
  */
 public interface MesosEventClient {
-
-    /**
-     * The outcome value to be included in a response object.
-     */
-    public enum Result {
-        /**
-         * The client failed or was not ready to process the request. Short-decline and come back later.
-         */
-        FAILED,
-
-        /**
-         * The client processed the request successfully.
-         */
-        PROCESSED
-    }
-
-    /**
-     * Response object to be returned by a call to {@link MesosEventClient#offers(List)}.
-     */
-    public static class OfferResponse {
-
-        /**
-         * The result of the call. Delineates between "not ready" (decline short) and "processed" (decline long).
-         */
-        public final Result result;
-
-        /**
-         * The operations to be performed using the provided offers.
-         */
-        public final List<OfferRecommendation> recommendations;
-
-        /**
-         * The offers which were not used to perform an operation.
-         */
-        public final List<Protos.Offer> unusedOffers;
-
-        public static OfferResponse notReady(List<Protos.Offer> allOffers) {
-            return new OfferResponse(Result.FAILED, Collections.emptyList(), allOffers);
-        }
-
-        public static OfferResponse processed(
-                List<OfferRecommendation> recommendations, List<Protos.Offer> unusedOffers) {
-            return new OfferResponse(Result.PROCESSED, recommendations, unusedOffers);
-        }
-
-        private OfferResponse(
-                Result result, List<OfferRecommendation> recommendations, List<Protos.Offer> unusedOffers) {
-            this.result = result;
-            this.recommendations = recommendations;
-            this.unusedOffers = unusedOffers;
-        }
-    }
-    /**
-     * Response object to be returned by a call to {@link MesosEventClient##getUnexpectedResources(List)}.
-     */
-    public static class UnexpectedResourcesResponse {
-
-        /**
-         * The result of the call. Delineates between "failed" (decline short) and "processed" (decline long).
-         */
-        public final Result result;
-
-        /**
-         * The resources which are unexpected, paired with their parent offers.
-         */
-        public final Collection<OfferResources> offerResources;
-
-        public static UnexpectedResourcesResponse failed(Collection<OfferResources> offerResources) {
-            return new UnexpectedResourcesResponse(Result.FAILED, offerResources);
-        }
-
-        public static UnexpectedResourcesResponse processed(Collection<OfferResources> offerResources) {
-            return new UnexpectedResourcesResponse(Result.PROCESSED, offerResources);
-        }
-
-        private UnexpectedResourcesResponse(Result result, Collection<OfferResources> offerResources) {
-            this.result = result;
-            this.offerResources = offerResources;
-        }
-    }
-
-    /**
-     * Response object to be returned by a call to {@link MesosEventClient#status(org.apache.mesos.Protos.TaskStatus)}.
-     */
-    public static class StatusResponse {
-
-        /**
-         * The result of the call. Delineates between "unknown" and "processed".
-         */
-        public final Result result;
-
-        public static StatusResponse unknownTask() {
-            return new StatusResponse(Result.FAILED);
-        }
-
-        public static StatusResponse processed() {
-            return new StatusResponse(Result.PROCESSED);
-        }
-
-        private StatusResponse(Result result) {
-            this.result = result;
-        }
-    }
 
     /**
      * Called when the framework has registered (or re-registered) with Mesos.
@@ -129,17 +25,17 @@ public interface MesosEventClient {
      * @return The response containing a list of operations to be performed against the offers, as well as a list of
      *         offers which were left unused. See {@link OfferResponse}
      */
-    public OfferResponse offers(List<Protos.Offer> offers);
+    public OfferResponse offers(Collection<Protos.Offer> offers);
 
     /**
      * Returns a list of resources from the provided list of offers which are not recognized by this client. The
      * returned unexpected resources will immediately be unreserved/destroyed.
      *
-     * @param unusedOffers The list of offers which were unclaimed in a prior call to {@link #offers(List)}
+     * @param unusedOffers The list of offers which were unclaimed in a prior call to {@link #offers(Collection)}
      * @return A subset of the provided offers paired with their resources to be unreserved/destroyed. May be paired
      *         with an error state if remaining unused offers should be declined-short rather than declined-long.
      */
-    public UnexpectedResourcesResponse getUnexpectedResources(List<Protos.Offer> unusedOffers);
+    public UnexpectedResourcesResponse getUnexpectedResources(Collection<Protos.Offer> unusedOffers);
 
     /**
      * Called when the framework has received a task status update from Mesos.
@@ -155,4 +51,186 @@ public interface MesosEventClient {
      * @return A list of annotated resource objects to be served by Jetty
      */
     public Collection<Object> getHTTPEndpoints();
+
+
+    //////
+    // RESPONSE TYPES
+    //////
+
+
+    /**
+     * Response object to be returned by a call to {@link MesosEventClient#offers(List)}.
+     */
+    public static class OfferResponse {
+
+        /**
+         * The outcome value to be included in a response object.
+         */
+        public enum Result {
+            /**
+             * The client was not fully ready to process the request, but may have still processed some offers.
+             * Short-decline any unused offers.
+             */
+            NOT_READY,
+
+            /**
+             * The client processed the request successfully. Long-decline any unused offers.
+             */
+            PROCESSED,
+
+            /**
+             * The client has finished an uninstall and can be shut down.
+             */
+            FINISHED
+        }
+
+        /**
+         * The result of the call. Delineates between "not ready" (short-decline unused offers), "processed"
+         * (long-decline unused offers), and "finished" (uninstall complete, tear down service).
+         */
+        public final Result result;
+
+        /**
+         * The operations to be performed using the provided offers.
+         */
+        public final Collection<OfferRecommendation> recommendations;
+
+        /**
+         * Tells the caller that this client was not completely ready to process offers. The caller should short-decline
+         * any unused offers. Recommendations may still be returned, in which they should be performed in addition to
+         * the short-decline of the remaining non-consumed offers.
+         *
+         * @param recommendations Operations to perform against some of the provided offers, which should be performed
+         *                        despite the client returning a not ready status
+         */
+        public static OfferResponse notReady(Collection<OfferRecommendation> recommendations) {
+            return new OfferResponse(Result.NOT_READY, recommendations);
+        }
+
+        /**
+         * Tells the caller that this client was able to process offers. The caller should long-decline any unused
+         * offers.
+         *
+         * @param recommendations Operations to perform against some of the provided offers
+         */
+        public static OfferResponse processed(Collection<OfferRecommendation> recommendations) {
+            return new OfferResponse(Result.PROCESSED, recommendations);
+        }
+
+        /**
+         * Tells the caller that this client has finished processing and can be shut down. The caller should
+         * long-decline any unused offers
+         */
+        public static OfferResponse finished() {
+            return new OfferResponse(Result.FINISHED, Collections.emptyList());
+        }
+
+        private OfferResponse(Result result, Collection<OfferRecommendation> recommendations) {
+            this.result = result;
+            this.recommendations = recommendations;
+        }
+    }
+    /**
+     * Response object to be returned by a call to {@link MesosEventClient##getUnexpectedResources(List)}.
+     */
+    public static class UnexpectedResourcesResponse {
+
+        /**
+         * The outcome value to be included in a response object.
+         */
+        public enum Result {
+            /**
+             * The client failed to log unexpected resources. Don't unreserve them yet, come back later.
+             */
+            FAILED,
+
+            /**
+             * The client processed the request successfully.
+             */
+            PROCESSED
+        }
+
+        /**
+         * The result of the call. Delineates between "failed" (decline short) and "processed" (unreserve/destroy).
+         */
+        public final Result result;
+
+        /**
+         * The resources which are unexpected, paired with their parent offers.
+         */
+        public final Collection<OfferResources> offerResources;
+
+        /**
+         * Tells the caller that this client failed to process unexpected offers, for example a failure to update a
+         * write-ahead log with the resources that are about to be unreserved/destroyed. However, a subset of resources
+         * may still be eligible for being unreserved/destroyed.
+         *
+         * @param unexpectedResources Any unexpected resources which should be unreserved and/or destroyed despite the
+         *                            failure, or an empty collection if no dereservations should occur
+         */
+        public static UnexpectedResourcesResponse failed(Collection<OfferResources> unexpectedResources) {
+            return new UnexpectedResourcesResponse(Result.FAILED, unexpectedResources);
+        }
+
+        /**
+         * Tells the caller that this client was able to process unexpected resources. The caller should unreserve
+         * and/or destroy the returned resources that were originally provided via the offers in the invocation.
+         *
+         * @param unexpectedResources Any unexpected resources which should be unreserved and/or destroyed
+         */
+        public static UnexpectedResourcesResponse processed(Collection<OfferResources> unexpectedResources) {
+            return new UnexpectedResourcesResponse(Result.PROCESSED, unexpectedResources);
+        }
+
+        private UnexpectedResourcesResponse(Result result, Collection<OfferResources> offerResources) {
+            this.result = result;
+            this.offerResources = offerResources;
+        }
+    }
+
+    /**
+     * Response object to be returned by a call to {@link MesosEventClient#status(org.apache.mesos.Protos.TaskStatus)}.
+     */
+    public static class StatusResponse {
+
+        /**
+         * The outcome value to be included in a response object.
+         */
+        public enum Result {
+            /**
+             * The status is for a task which is unknown to the client.
+             */
+            UNKNOWN_TASK,
+
+            /**
+             * The client processed the request successfully.
+             */
+            PROCESSED
+        }
+
+        /**
+         * The result of the call. Delineates between "unknown" and "processed".
+         */
+        public final Result result;
+
+        /**
+         * Tells the caller that this client did not recognize task described by this status. The caller should kill the
+         * task so that its reserved resources will be offered by Mesos, at which point those resources will be
+         * unreserved via the unexpected resources cleanup process.
+         */
+        public static StatusResponse unknownTask() {
+            return new StatusResponse(Result.UNKNOWN_TASK);
+        }
+
+        /**
+         * Tells the caller that this client successfully processed the provided task status.
+         */
+        public static StatusResponse processed() {
+            return new StatusResponse(Result.PROCESSED);
+        }
+
+        private StatusResponse(Result result) {
+            this.result = result;
+        }
+    }
 }

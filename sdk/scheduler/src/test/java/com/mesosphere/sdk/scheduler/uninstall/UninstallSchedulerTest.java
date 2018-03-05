@@ -5,7 +5,7 @@ import com.mesosphere.sdk.offer.CommonIdUtils;
 import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.offer.taskdata.TaskLabelWriter;
 import com.mesosphere.sdk.scheduler.Driver;
-import com.mesosphere.sdk.scheduler.MesosEventClient;
+import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
 import com.mesosphere.sdk.scheduler.MesosEventClient.UnexpectedResourcesResponse;
 import com.mesosphere.sdk.scheduler.plan.*;
 import com.mesosphere.sdk.specification.*;
@@ -97,7 +97,7 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
     @Test
     public void testEmptyOffers() throws Exception {
         UninstallScheduler uninstallScheduler = getUninstallScheduler();
-        Assert.assertEquals(MesosEventClient.Result.PROCESSED, uninstallScheduler.offers(Collections.emptyList()).result);
+        Assert.assertEquals(OfferResponse.Result.PROCESSED, uninstallScheduler.offers(Collections.emptyList()).result);
         verify(mockSchedulerDriver, times(1)).reconcileTasks(any());
         verify(mockSchedulerDriver, times(0)).acceptOffers(any(), anyCollectionOf(Protos.Offer.Operation.class), any());
         verify(mockSchedulerDriver, times(0)).declineOffer(any(), any());
@@ -172,7 +172,7 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
         // Verify that scheduler doesn't expect _1 and _2. It then expects that they have been cleaned:
         UnexpectedResourcesResponse response =
                 uninstallScheduler.getUnexpectedResources(Collections.singletonList(offer));
-        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
+        Assert.assertEquals(UnexpectedResourcesResponse.Result.PROCESSED, response.result);
         Assert.assertEquals(1, response.offerResources.size());
         Assert.assertEquals(offer.getResourcesList(), response.offerResources.iterator().next().getResources());
 
@@ -186,7 +186,7 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
 
         // Verify that scheduler doesn't expect _3. It then expects that it has been cleaned:
         response = uninstallScheduler.getUnexpectedResources(Collections.singletonList(offer));
-        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
+        Assert.assertEquals(UnexpectedResourcesResponse.Result.PROCESSED, response.result);
         Assert.assertEquals(1, response.offerResources.size());
         Assert.assertEquals(offer.getResourcesList(), response.offerResources.iterator().next().getResources());
 
@@ -205,7 +205,7 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
         // Verify that scheduler doesn't expect _1/_2/_3. It then expects that they have been cleaned:
         UnexpectedResourcesResponse response =
                 uninstallScheduler.getUnexpectedResources(Collections.singletonList(offer));
-        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
+        Assert.assertEquals(UnexpectedResourcesResponse.Result.PROCESSED, response.result);
         Assert.assertEquals(1, response.offerResources.size());
         Assert.assertEquals(offer.getResourcesList(), response.offerResources.iterator().next().getResources());
 
@@ -266,7 +266,7 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
         // Verify that scheduler doesn't expect _1/_2/_3. It then expects that they have been cleaned:
         UnexpectedResourcesResponse response =
                 uninstallScheduler.getUnexpectedResources(Collections.singletonList(offer));
-        Assert.assertEquals(MesosEventClient.Result.PROCESSED, response.result);
+        Assert.assertEquals(UnexpectedResourcesResponse.Result.PROCESSED, response.result);
         Assert.assertEquals(1, response.offerResources.size());
         Assert.assertEquals(offer.getResourcesList(), response.offerResources.iterator().next().getResources());
 

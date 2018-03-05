@@ -20,7 +20,7 @@ public class OfferUtils {
      * @return Offers are that not ACCEPTED yet, or an empty list if there are no UNACCEPTED offers left
      */
     public static List<Protos.Offer> filterOutAcceptedOffers(
-            List<Protos.Offer> offers, Collection<? extends OfferRecommendation> recommendations) {
+            Collection<Protos.Offer> offers, Collection<? extends OfferRecommendation> recommendations) {
         Set<Protos.OfferID> usedOfferIds = recommendations.stream()
                 .map(rec -> rec.getOffer().getId())
                 .collect(Collectors.toSet());

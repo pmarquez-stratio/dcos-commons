@@ -8,51 +8,60 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
+
 import org.apache.mesos.Protos;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import com.google.protobuf.TextFormat;
 import com.mesosphere.sdk.http.endpoints.*;
 import com.mesosphere.sdk.http.types.StringPropertyDeserializer;
 import com.mesosphere.sdk.offer.CommonIdUtils;
+import com.mesosphere.sdk.offer.LoggingUtils;
 import com.mesosphere.sdk.offer.OfferRecommendation;
+import com.mesosphere.sdk.offer.OfferUtils;
 import com.mesosphere.sdk.offer.ResourceUtils;
 import com.mesosphere.sdk.offer.TaskException;
 import com.mesosphere.sdk.queues.http.endpoints.*;
+import com.mesosphere.sdk.scheduler.DefaultScheduler;
 import com.mesosphere.sdk.scheduler.MesosEventClient;
 import com.mesosphere.sdk.scheduler.OfferResources;
+import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.scheduler.ServiceScheduler;
+import com.mesosphere.sdk.scheduler.uninstall.UninstallScheduler;
 
 /**
  * Mesos client which wraps running jobs, routing Mesos events to the appropriate jobs.
  */
 public class JobsEventClient implements MesosEventClient {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(JobsEventClient.class);
+    private static final Logger LOGGER = LoggingUtils.getLogger(JobsEventClient.class);
 
+    private final boolean isUninstalling;
     private final DefaultJobInfoProvider jobInfoProvider;
 
-    public JobsEventClient() {
-        jobInfoProvider = new DefaultJobInfoProvider();
+    public JobsEventClient(SchedulerConfig schedulerConfig) {
+        this.isUninstalling = schedulerConfig.isUninstallEnabled();
+        this.jobInfoProvider = new DefaultJobInfoProvider();
     }
 
     /**
      * Adds a job which is mapped for the specified name.
      *
-     * @param name the unique name of the client
      * @param job the client to add
      * @return {@code this}
      * @throws IllegalArgumentException if the name is already present
      */
-    public JobsEventClient putJob(String name, ServiceScheduler job) {
-        LOGGER.info("putJob {}", name);
+    public JobsEventClient putJob(ServiceScheduler job) {
         Map<String, ServiceScheduler> jobs = jobInfoProvider.lockRW();
+        LOGGER.info("Adding service: {} (now {} services)", job.getName(), jobs.size() + 1);
         try {
-            ServiceScheduler previousJob = jobs.put(name, job);
+            ServiceScheduler previousJob = jobs.put(job.getName(), job);
             if (previousJob != null) {
                 // Put the old client back before throwing...
-                jobs.put(name, previousJob);
-                throw new IllegalArgumentException("Service named '" + name + "' is already present");
+                jobs.put(job.getName(), previousJob);
+                throw new IllegalArgumentException(
+                        String.format("Service named '%s' is already present", job.getName()));
             }
             return this;
         } finally {
@@ -61,16 +70,38 @@ public class JobsEventClient implements MesosEventClient {
     }
 
     /**
-     * Removes a client mapping which was previously added using the provided name.
+     * Triggers an uninstall for a job, removing it from the list of jobs when it has finished. Does nothing if the job
+     * is already uninstalling.
      *
-     * @param name the name of the client to remove
-     * @return the removed client, or {@code null} if no client with that name was found
+     * @param name the name of the job to be uninstalled
+     * @return {@code this}
+     * @throws IllegalArgumentException if the name does not exist
      */
-    public MesosEventClient removeJob(String name) {
-        LOGGER.info("removeJob {}", name);
+    public JobsEventClient uninstallJob(String name) {
+        // TODO(nickbp): UNINSTALL Need to persist the fact that this job is uninstalling and automatically resume
+        // uninstalling it if the scheduler gets restarted. Flow:
+        // - UninstallScheduler sets the bit within the storage namespace when uninstall starts (moved from always-root)
+        // - SchedulerBuilder checks for the bit (in addition to current SchedulerConfig bit)
+        // - Assuming that upstream consistently uses SchedulerBuilder, we should get UninstallSchedulers added
+        //   automatically. BUT we need a way to tell upstream when they should or shouldn't be creating the schedulers.
+        //   Maybe have a service that just automatically rebuilds schedulers based off of zk/config storage?
         Map<String, ServiceScheduler> jobs = jobInfoProvider.lockRW();
+        LOGGER.info("Marking service as uninstalling: {} (out of {} services)", name, jobs.size());
         try {
-            return jobs.remove(name);
+            ServiceScheduler currentJob = jobs.get(name);
+            if (currentJob == null) {
+                throw new IllegalArgumentException(String.format(
+                        "Service '%s' does not exist: nothing to uninstall", name));
+            }
+            if (currentJob instanceof UninstallScheduler) {
+                // Already uninstalling
+                LOGGER.warn("Told to uninstall service '{}', but it is already uninstalling", name);
+                return this;
+            }
+            // Convert the DefaultScheduler to an UninstallScheduler, which will then perform the uninstall. When it has
+            // completed, it will return FINISHED to its next offers() call, at which point we will remove it.
+            jobs.put(name, ((DefaultScheduler) currentJob).toUninstallScheduler());
+            return this;
         } finally {
             jobInfoProvider.unlockRW();
         }
@@ -78,8 +109,9 @@ public class JobsEventClient implements MesosEventClient {
 
     @Override
     public void register(boolean reRegistered) {
-        LOGGER.info("register reRegistered={}", reRegistered);
         Collection<ServiceScheduler> jobs = jobInfoProvider.lockAllR();
+        LOGGER.info("Notifying {} services of {}",
+                jobs.size(), reRegistered ? "re-registration" : "initial registration");
         try {
             jobs.stream().forEach(c -> c.register(reRegistered));
         } finally {
@@ -99,32 +131,57 @@ public class JobsEventClient implements MesosEventClient {
      * </ul>
      */
     @Override
-    public OfferResponse offers(List<Protos.Offer> offers) {
-        LOGGER.info("offers={}", offers.size());
+    public OfferResponse offers(Collection<Protos.Offer> offers) {
         boolean anyNotReady = false;
 
         List<OfferRecommendation> recommendations = new ArrayList<>();
-        List<Protos.Offer> unusedOffers = new ArrayList<>();
-        unusedOffers.addAll(offers);
+        List<Protos.Offer> remainingOffers = new ArrayList<>();
+        remainingOffers.addAll(offers);
+
+        Collection<String> jobsToRemove = new ArrayList<>();
 
         Collection<ServiceScheduler> jobs = jobInfoProvider.lockAllR();
+        LOGGER.info("Sending {} offer{} to {} service{}:",
+                offers.size(), offers.size() == 1 ? "" : "s",
+                jobs.size(), jobs.size() == 1 ? "" : "s");
         try {
             if (jobs.isEmpty()) {
-                // If we don't have any clients, then WE aren't ready. Decline short.
-                anyNotReady = true;
-            }
-            for (MesosEventClient job : jobs) {
-                OfferResponse response = job.offers(unusedOffers);
-                // Create a new list with unused offers. Avoid clearing in-place, in case response is the original list.
-                unusedOffers = new ArrayList<>();
-                unusedOffers.addAll(response.unusedOffers);
-                recommendations.addAll(response.recommendations);
-                LOGGER.info("  response={}: recommendations={} unusedOffers={}",
-                        response.result, response.recommendations.size(), response.unusedOffers.size());
-
-                if (response.result == MesosEventClient.Result.FAILED) {
-                    // This client wasn't ready. Decline short.
+                if (isUninstalling) {
+                    // We're uninstalling everything and all jobs have been cleaned up. Tell the caller that they can
+                    // finish with final framework cleanup.
+                    return OfferResponse.finished();
+                } else {
+                    // If we don't have any clients, then WE aren't ready. Decline short.
                     anyNotReady = true;
+                }
+            }
+            for (ServiceScheduler job : jobs) {
+                OfferResponse response = job.offers(remainingOffers);
+                if (!remainingOffers.isEmpty() && !response.recommendations.isEmpty()) {
+                    // Some offers were consumed. Update what remains to offer to the next job.
+                    List<Protos.Offer> updatedRemainingOffers =
+                            OfferUtils.filterOutAcceptedOffers(remainingOffers, response.recommendations);
+                    remainingOffers = updatedRemainingOffers;
+                }
+                recommendations.addAll(response.recommendations);
+                LOGGER.info("  {} offer result: {}[{} rec{}], {} offer{} remaining",
+                        job.getName(),
+                        response.result,
+                        response.recommendations.size(), response.recommendations.size() == 1 ? "" : "s",
+                        remainingOffers.size(), remainingOffers.size() == 1 ? "" : "s");
+
+                switch (response.result) {
+                case FINISHED:
+                    // This client has completed an uninstall operation.
+                    jobsToRemove.add(job.getName());
+                    break;
+                case NOT_READY:
+                    // This client wasn't ready. Tell upstream to short-decline any remaining offers.
+                    anyNotReady = true;
+                    break;
+                case PROCESSED:
+                    // No-op, keep going.
+                    break;
                 }
 
                 // If we run out of unusedOffers we still keep going with an empty list of offers.
@@ -134,10 +191,28 @@ public class JobsEventClient implements MesosEventClient {
             jobInfoProvider.unlockR();
         }
 
-        LOGGER.info("  anyNotReady={}", anyNotReady);
+        if (!jobsToRemove.isEmpty()) {
+            // Note: It's possible that we can have a race where we attempt to remove the same job twice. This is fine.
+            //       (Picture two near-simultaneous calls to offers(): Both send offers, both get FINISHED back, ...)
+            Map<String, ServiceScheduler> jobsMap = jobInfoProvider.lockRW();
+            LOGGER.info("Removing {} uninstalled service{}: {} (from {} total services)",
+                    jobsToRemove.size(), jobsToRemove.size() == 1 ? "" : "s", jobsToRemove, jobsMap.size());
+            try {
+                for (String job : jobsToRemove) {
+                    jobsMap.remove(job);
+                }
+            } finally {
+                jobInfoProvider.unlockRW();
+            }
+
+        }
+
         return anyNotReady
-                ? OfferResponse.notReady(unusedOffers)
-                : OfferResponse.processed(recommendations, unusedOffers);
+                // Return the subset of recommendations that could still be performed, but tell upstream to
+                // short-decline the unused offers:
+                ? OfferResponse.notReady(recommendations)
+                // All clients were able to process offers, so tell upstream to long-decline the unused offers:
+                : OfferResponse.processed(recommendations);
     }
 
     /**
@@ -149,7 +224,7 @@ public class JobsEventClient implements MesosEventClient {
      * resources which relate to them.
      */
     @Override
-    public UnexpectedResourcesResponse getUnexpectedResources(List<Protos.Offer> unusedOffers) {
+    public UnexpectedResourcesResponse getUnexpectedResources(Collection<Protos.Offer> unusedOffers) {
         // Resources can be unexpected for any of the following reasons:
         // - (CASE 1) Resources which lack a service name (shouldn't happen in practice)
         // - (CASE 2) Resources with an unrecognized service name (old resources?)
@@ -174,9 +249,18 @@ public class JobsEventClient implements MesosEventClient {
                     // Send directly to the unexpected list.
                     getEntry(unexpectedResources, offer).add(resource);
                 } else {
-                    // Not a reserved. Ignore.
+                    // Not a reserved resource. Ignore for cleanup purposes.
                 }
             }
+        }
+        LOGGER.info("Sorted reserved resources from {} offer{} into {} services: {}",
+                unusedOffers.size(),
+                unusedOffers.size() == 1 ? "" : "s",
+                offersByService.size(),
+                offersByService.keySet());
+        if (!unexpectedResources.isEmpty()) {
+            LOGGER.warn("Encountered {} malformed resources to clean up: {}",
+                    unexpectedResources.size(), unexpectedResources.values());
         }
 
         // Iterate over offersByService and find out if the services in question still want the resources.
@@ -190,6 +274,7 @@ public class JobsEventClient implements MesosEventClient {
             try {
                 if (job == null) {
                     // (CASE 2) Old or invalid service name. Consider all resources for this service as unexpected.
+                    LOGGER.info("  {} cleanup result: unknown service, all resources unexpected", serviceName);
                     for (OfferResources serviceOffer : serviceOffers) {
                         getEntry(unexpectedResources, serviceOffer.getOffer()).addAll(serviceOffer.getResources());
                     }
@@ -207,13 +292,22 @@ public class JobsEventClient implements MesosEventClient {
                     // Add those to unexpectedResources.
                     // Note: We're careful to only invoke this once per service, as the call is likely to be expensive.
                     UnexpectedResourcesResponse response = job.getUnexpectedResources(offersToSend);
+                    LOGGER.info("  {} cleanup result: {} with {} unexpected resources in {} offers",
+                            serviceName,
+                            response.result,
+                            response.offerResources.stream()
+                                    .collect(Collectors.summingInt(or -> or.getResources().size())),
+                            response.offerResources.size());
                     switch (response.result) {
                     case FAILED:
-                        LOGGER.error("Failed to get unexpected resources from job {}, leaving it as-is", serviceName);
                         // We should be able to safely skip this service and proceed to the next one. For this round,
-                        // the service just won't have anything added to unexpectedResources. We play it safe tell
+                        // the service just won't have anything added to unexpectedResources. We play it safe by telling
                         // upstream to do a short decline for the unprocessed resources.
                         anyFailedClients = true;
+                        for (OfferResources unexpectedInOffer : response.offerResources) {
+                            getEntry(unexpectedResources, unexpectedInOffer.getOffer())
+                                    .addAll(unexpectedInOffer.getResources());
+                        }
                         break;
                     case PROCESSED:
                         for (OfferResources unexpectedInOffer : response.offerResources) {
@@ -251,16 +345,23 @@ public class JobsEventClient implements MesosEventClient {
         }
         if (!serviceName.isPresent()) {
             // Bad task id.
+            LOGGER.error("Received task status with malformed id '{}', unable to route to service: {}",
+                    status.getTaskId().getValue(), TextFormat.shortDebugString(status));
             return StatusResponse.unknownTask();
         }
 
         ServiceScheduler job = jobInfoProvider.lockJobR(serviceName.get());
         try {
             if (job == null) {
-                // Unrecognized service. Old task?
+                // Unrecognized service. Status for old task?
+                LOGGER.info("Received task status for unknown service {}: {}",
+                        serviceName.get(), TextFormat.shortDebugString(status));
                 return StatusResponse.unknownTask();
+            } else {
+                LOGGER.info("Received task status for service {}: {}={}",
+                        serviceName.get(), status.getTaskId().getValue(), status.getState());
+                return job.status(status);
             }
-            return job.status(status);
         } finally {
             jobInfoProvider.unlockR();
         }

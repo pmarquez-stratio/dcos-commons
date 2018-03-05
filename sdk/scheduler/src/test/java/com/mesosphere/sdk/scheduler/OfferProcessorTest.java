@@ -24,8 +24,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.mesosphere.sdk.offer.Constants;
+import com.mesosphere.sdk.offer.ReserveOfferRecommendation;
 import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
 import com.mesosphere.sdk.scheduler.MesosEventClient.UnexpectedResourcesResponse;
+import com.mesosphere.sdk.testutils.ResourceTestUtils;
 import com.mesosphere.sdk.testutils.TestConstants;
 
 import static org.mockito.Mockito.*;
@@ -67,13 +69,7 @@ public class OfferProcessorTest {
 
     @Test
     public void testOffersUnused() throws InterruptedException {
-        when(mockMesosEventClient.offers(any())).thenAnswer(new Answer<OfferResponse>() {
-            @Override
-            public OfferResponse answer(InvocationOnMock invocation) throws Throwable {
-                // Pass back all the offers we got as unused:
-                return OfferResponse.processed(Collections.emptyList(), getOffersArgument(invocation));
-            }
-        });
+        when(mockMesosEventClient.offers(any())).thenReturn(OfferResponse.processed(Collections.emptyList()));
         when(mockMesosEventClient.getUnexpectedResources(any()))
                 .thenReturn(UnexpectedResourcesResponse.processed(Collections.emptyList()));
 
@@ -86,13 +82,7 @@ public class OfferProcessorTest {
 
     @Test
     public void testOffersNotReady() throws InterruptedException {
-        when(mockMesosEventClient.offers(any())).thenAnswer(new Answer<OfferResponse>() {
-            @Override
-            public OfferResponse answer(InvocationOnMock invocation) throws Throwable {
-                // Pass back all the offers we got in the not-ready response:
-                return OfferResponse.notReady(getOffersArgument(invocation));
-            }
-        });
+        when(mockMesosEventClient.offers(any())).thenReturn(OfferResponse.notReady(Collections.emptyList()));
         when(mockMesosEventClient.getUnexpectedResources(any()))
                 .thenReturn(UnexpectedResourcesResponse.processed(Collections.emptyList()));
 
@@ -103,16 +93,21 @@ public class OfferProcessorTest {
         verify(mockSchedulerDriver, times(sentOfferIds.size())).declineOffer(any(), eq(SHORT_INTERVAL));
     }
 
-    @Ignore("TODO")
+    @Ignore("TODO(nickbp)")
     @Test
     public void writeUnexpectedResourcesTests() {
-        Assert.fail("TODO tests for getUnexpectedResources");
+        // TODO(nickbp) tests for getUnexpectedResources
+    }
+
+    @Ignore("TODO(nickbp)")
+    @Test
+    public void writeUninstalledServiceTests() {
+        // TODO(nickbp) tests for uninstalled service (FINISHED for offers)
     }
 
     @Test
     public void testAsyncOffersLimitedQueueSize() throws InterruptedException {
-        when(mockMesosEventClient.offers(any())).thenReturn(
-                OfferResponse.processed(Collections.emptyList(), Collections.emptyList()));
+        when(mockMesosEventClient.offers(any())).thenReturn(OfferResponse.processed(Collections.emptyList()));
         when(mockMesosEventClient.getUnexpectedResources(any()))
                 .thenReturn(UnexpectedResourcesResponse.processed(Collections.emptyList()));
         processor.setOfferQueueSize(10).start();
@@ -134,7 +129,10 @@ public class OfferProcessorTest {
             public OfferResponse answer(InvocationOnMock invocation) throws Throwable {
                 List<Protos.Offer> offers = getOffersArgument(invocation);
                 receivedCount.addAndGet(offers.size());
-                return OfferResponse.processed(Collections.emptyList(), Collections.emptyList());
+                // Consume all the offers:
+                return OfferResponse.processed(offers.stream()
+                        .map(offer -> new ReserveOfferRecommendation(offer, ResourceTestUtils.getUnreservedCpus(3)))
+                        .collect(Collectors.toList()));
             }
         });
         when(mockMesosEventClient.getUnexpectedResources(any()))

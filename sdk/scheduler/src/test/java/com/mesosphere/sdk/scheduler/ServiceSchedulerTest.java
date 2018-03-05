@@ -14,7 +14,6 @@ import org.apache.mesos.Protos.Offer;
 import org.apache.mesos.SchedulerDriver;
 
 import com.mesosphere.sdk.dcos.clients.SecretsClient;
-import com.mesosphere.sdk.offer.OfferRecommendation;
 import com.mesosphere.sdk.scheduler.plan.PlanCoordinator;
 import com.mesosphere.sdk.scheduler.plan.Step;
 import com.mesosphere.sdk.specification.ServiceSpec;
@@ -60,14 +59,14 @@ public class ServiceSchedulerTest {
         ServiceScheduler scheduler = getScheduler();
 
         // Not reconciled yet:
-        Assert.assertEquals(MesosEventClient.Result.FAILED,
+        Assert.assertEquals(MesosEventClient.OfferResponse.Result.NOT_READY,
                 scheduler.offers(Arrays.asList(getOffer(), getOffer(), getOffer())).result);
 
         // Get the task marked reconciled:
         scheduler.status(TestConstants.TASK_STATUS);
 
         // Ready to go:
-        Assert.assertEquals(MesosEventClient.Result.PROCESSED,
+        Assert.assertEquals(MesosEventClient.OfferResponse.Result.PROCESSED,
                 scheduler.offers(Arrays.asList(getOffer(), getOffer(), getOffer())).result);
     }
 
@@ -121,8 +120,8 @@ public class ServiceSchedulerTest {
         }
 
         @Override
-        protected List<OfferRecommendation> processOffers(List<Protos.Offer> offers, Collection<Step> steps) {
-            return Collections.emptyList();
+        protected OfferResponse processOffers(Collection<Protos.Offer> offers, Collection<Step> steps) {
+            return OfferResponse.processed(Collections.emptyList());
         }
 
         @Override
@@ -132,7 +131,7 @@ public class ServiceSchedulerTest {
         }
 
         @Override
-        public UnexpectedResourcesResponse getUnexpectedResources(List<Offer> unusedOffers) {
+        public UnexpectedResourcesResponse getUnexpectedResources(Collection<Offer> unusedOffers) {
             return UnexpectedResourcesResponse.processed(Collections.emptyList());
         }
     }

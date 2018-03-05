@@ -7,8 +7,8 @@ import java.util.Optional;
 import java.util.TreeSet;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import com.google.common.util.concurrent.CycleDetectingLockFactory;
 import com.mesosphere.sdk.queues.http.types.JobInfoProvider;
 import com.mesosphere.sdk.scheduler.ServiceScheduler;
 import com.mesosphere.sdk.scheduler.plan.PlanCoordinator;
@@ -17,45 +17,49 @@ import com.mesosphere.sdk.state.ConfigStore;
 import com.mesosphere.sdk.state.StateStore;
 
 /**
- * Default implementation of {@link JobInfoProvider}. Central storage of running jobs, handles routing of Mesos input to
- * jobs.
+ * Default implementation of {@link JobInfoProvider} which also handles central storage of running jobs.
+ *
+ * The interface represents what's visible to job HTTP resources, whereas this implementation represents what's
+ * available to {@code JobsEventClient}.
  */
 public class DefaultJobInfoProvider implements JobInfoProvider {
 
-    private final ReadWriteLock internalLock;
-    private final Lock rlock;
-    private final Lock rwlock;
+    private final ReadWriteLock internalLock = new ReentrantReadWriteLock();
+    private final Lock rlock = internalLock.readLock();
+    private final Lock rwlock = internalLock.writeLock();
 
-    private final Map<String, ServiceScheduler> jobs;
+    private final Map<String, ServiceScheduler> jobs = new HashMap<>();
 
-    DefaultJobInfoProvider() {
-        // TODO(nick) find cycles...
-        CycleDetectingLockFactory factory =
-                CycleDetectingLockFactory.newInstance(CycleDetectingLockFactory.Policies.THROW);
-        internalLock = factory.newReentrantReadWriteLock("DefaultJobInfoProvider");
-        rlock = internalLock.readLock();
-        rwlock = internalLock.writeLock();
-        jobs = new HashMap<>();
-    }
-
+    /**
+     * Returns the {@link StateStore} for the specified job, or an empty {@link Optional} if the job was not found.
+     */
     @Override
     public Optional<StateStore> getStateStore(String jobName) {
         ServiceScheduler scheduler = getJob(jobName);
         return scheduler == null ? Optional.empty() : Optional.of(scheduler.getStateStore());
     }
 
+    /**
+     * Returns the {@link ConfigStore} for the specified job, or an empty {@link Optional} if the job was not found.
+     */
     @Override
     public Optional<ConfigStore<ServiceSpec>> getConfigStore(String jobName) {
         ServiceScheduler scheduler = getJob(jobName);
         return scheduler == null ? Optional.empty() : Optional.of(scheduler.getConfigStore());
     }
 
+    /**
+     * Returns the {@link PlanCoordinator} for the specified job, or an empty {@link Optional} if the job was not found.
+     */
     @Override
     public Optional<PlanCoordinator> getPlanCoordinator(String jobName) {
         ServiceScheduler scheduler = getJob(jobName);
         return scheduler == null ? Optional.empty() : Optional.of(scheduler.getPlanCoordinator());
     }
 
+    /**
+     * Returns the list of currently available jobs.
+     */
     @Override
     public Collection<String> getJobs() {
         Collection<String> jobNames = new TreeSet<>(); // Alphabetical order
@@ -81,7 +85,7 @@ public class DefaultJobInfoProvider implements JobInfoProvider {
     }
 
     /**
-     * Sets a non-exclusive read lock and returns the job values.
+     * Sets a shared read lock and returns the job values.
      */
     public Collection<ServiceScheduler> lockAllR() {
         rlock.lock();
@@ -89,7 +93,7 @@ public class DefaultJobInfoProvider implements JobInfoProvider {
     }
 
     /**
-     * Sets a non-exclusive read lock and returns the specified job, or {@code null} if it's not found. In either case,
+     * Sets a shared read lock and returns the specified job, or {@code null} if it's not found. In either case,
      * {@link #unlockR()} must be called afterwards.
      */
     public ServiceScheduler lockJobR(String jobName) {
