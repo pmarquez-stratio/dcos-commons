@@ -8,6 +8,7 @@ import com.mesosphere.sdk.scheduler.MesosEventClient;
 import com.mesosphere.sdk.scheduler.Metrics;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.scheduler.ServiceScheduler;
+import com.mesosphere.sdk.state.SchemaVersionStore;
 import com.mesosphere.sdk.storage.Persister;
 import com.mesosphere.sdk.storage.PersisterCache;
 import com.mesosphere.sdk.storage.PersisterException;
@@ -18,6 +19,11 @@ import com.mesosphere.sdk.storage.PersisterException;
  * <p>WARNING: This is not a stable API, and can go away at any time.
  */
 public class QueueRunner implements Runnable {
+
+    /**
+     * Schema version used by single-service schedulers, which is what {@link QueueRunner} runs.
+     */
+    private static final int SUPPORTED_SCHEMA_VERSION_MULTI_SERVICE = 2;
 
     private final SchedulerConfig schedulerConfig;
     private final FrameworkConfig frameworkConfig;
@@ -51,6 +57,8 @@ public class QueueRunner implements Runnable {
 
         // Lock curator before returning access to persister.
         CuratorLocker.lock(frameworkConfig.getFrameworkName(), frameworkConfig.getZookeeperHostPort());
+        // Check and/or initialize schema version before doing any other storage access:
+        new SchemaVersionStore(persister).check(SUPPORTED_SCHEMA_VERSION_MULTI_SERVICE);
 
         return new QueueRunner(schedulerConfig, frameworkConfig, persister, client, usingGpus);
     }

@@ -80,6 +80,7 @@ public class JobsEventClientTest {
     @Mock private ServiceScheduler mockClient8;
     @Mock private ServiceScheduler mockClient9;
     @Mock private SchedulerConfig mockSchedulerConfig;
+    @Mock private JobsEventClient.UninstallCallback mockUninstallCallback;
 
     private JobsEventClient client;
 
@@ -95,7 +96,7 @@ public class JobsEventClientTest {
         when(mockClient7.getName()).thenReturn("7");
         when(mockClient8.getName()).thenReturn("8");
         when(mockClient9.getName()).thenReturn("9");
-        client = new JobsEventClient(mockSchedulerConfig);
+        client = new JobsEventClient(mockSchedulerConfig, mockUninstallCallback);
     }
 
     @Test
@@ -126,13 +127,13 @@ public class JobsEventClientTest {
     @Ignore("TODO(nickbp)")
     @Test
     public void writeUnexpectedResourcesTests() {
-        // TODO(nickbp) tests for getUnexpectedResources");
+        // TODO(nickbp) tests for getUnexpectedResources
     }
 
     @Ignore("TODO(nickbp)")
     @Test
     public void writeUninstalledServiceTests() {
-        // TODO(nickbp) tests for uninstalled service (FINISHED for offers)");
+        // TODO(nickbp) tests for uninstalled service (FINISHED for offers)
     }
 
     @Test

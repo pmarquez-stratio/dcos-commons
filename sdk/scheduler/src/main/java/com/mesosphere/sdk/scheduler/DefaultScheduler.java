@@ -32,8 +32,10 @@ import java.util.stream.Collectors;
  */
 public class DefaultScheduler extends ServiceScheduler {
 
-    private final ServiceSpec serviceSpec;
     private final Logger logger;
+    private final SchedulerConfig schedulerConfig;
+    private final ServiceSpec serviceSpec;
+    private final FrameworkStore frameworkStore;
     private final ConfigStore<ServiceSpec> configStore;
     private final PlanCoordinator planCoordinator;
     private final Collection<Object> customResources;
@@ -58,7 +60,6 @@ public class DefaultScheduler extends ServiceScheduler {
      * including details such as the service name, the pods/tasks to be deployed, and the plans describing how the
      * deployment should be organized.
      */
-    @VisibleForTesting
     public static SchedulerBuilder newBuilder(
             ServiceSpec serviceSpec, SchedulerConfig schedulerConfig, Persister persister) throws PersisterException {
         return new SchedulerBuilder(serviceSpec, schedulerConfig, persister);
@@ -78,9 +79,11 @@ public class DefaultScheduler extends ServiceScheduler {
             ConfigStore<ServiceSpec> configStore,
             ArtifactQueries.TemplateUrlFactory templateUrlFactory,
             Map<String, EndpointProducer> customEndpointProducers) throws ConfigStoreException {
-        super(serviceSpec.getName(), frameworkStore, stateStore, schedulerConfig, planCustomizer);
+        super(serviceSpec.getName(), stateStore, planCustomizer);
+        this.schedulerConfig = schedulerConfig;
         this.serviceSpec = serviceSpec;
         this.logger = LoggingUtils.getLogger(getClass(), serviceSpec.getName());
+        this.frameworkStore = frameworkStore;
         this.configStore = configStore;
         this.planCoordinator = planCoordinator;
         this.customResources = customResources;
@@ -156,6 +159,12 @@ public class DefaultScheduler extends ServiceScheduler {
         }
 
         killUnneededTasks(stateStore, activeTasks);
+    }
+
+    @Override
+    public void unregistered() {
+        throw new UnsupportedOperationException(
+                "Should not have received unregistered call. This is only applicable to UninstallSchedulers");
     }
 
     private static Optional<DecommissionPlanManager> getDecommissionManager(PlanCoordinator planCoordinator) {
@@ -345,16 +354,12 @@ public class DefaultScheduler extends ServiceScheduler {
     }
 
     /**
-     * Creates a new {@link UninstallScheduler} based on the local components.
-     * This is used to uninstall a service without restarting the framework scheduler process.
+     * Creates a new {@link UninstallScheduler} based on the local components.  This is used to trigger uninstall of a
+     * service without restarting the framework scheduler process. The created {@link UninstallScheduler} will
+     * automatically flag the service's StateStore with an uninstall bit.
      */
     public UninstallScheduler toUninstallScheduler() {
         return new UninstallScheduler(
-                this.serviceSpec,
-                this.frameworkStore,
-                this.stateStore,
-                this.configStore,
-                this.schedulerConfig,
-                this.planCustomizer);
+                this.serviceSpec, this.stateStore, this.configStore, this.schedulerConfig, this.planCustomizer);
     }
 }

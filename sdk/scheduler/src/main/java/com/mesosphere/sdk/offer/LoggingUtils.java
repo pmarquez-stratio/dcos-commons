@@ -21,8 +21,8 @@ public class LoggingUtils {
      * @param clazz the class using this logger
      */
     public static Logger getLogger(Class<?> clazz) {
-        // TODO(nickbp): This currently results in a name of e.g. "LoggingUtils". Consider including an abbreviated
-        // package like 'c.m.s.o.LoggingUtils'. This could be done via clazz.getName()?
+        // Note: This currently results in a name like "LoggingUtils" in logs.
+        // Consider including an abbreviated package prefix, e.g. "c.m.s.o.LoggingUtils"?
         return LoggerFactory.getLogger(clazz.getSimpleName());
     }
 

@@ -2,7 +2,6 @@ package com.mesosphere.sdk.scheduler.uninstall;
 
 import com.mesosphere.sdk.dcos.clients.SecretsClient;
 import com.mesosphere.sdk.offer.CommonIdUtils;
-import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.offer.taskdata.TaskLabelWriter;
 import com.mesosphere.sdk.scheduler.Driver;
 import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
@@ -10,7 +9,6 @@ import com.mesosphere.sdk.scheduler.MesosEventClient.UnexpectedResourcesResponse
 import com.mesosphere.sdk.scheduler.plan.*;
 import com.mesosphere.sdk.specification.*;
 import com.mesosphere.sdk.state.ConfigStore;
-import com.mesosphere.sdk.state.FrameworkStore;
 import com.mesosphere.sdk.state.StateStore;
 import com.mesosphere.sdk.storage.MemPersister;
 import com.mesosphere.sdk.storage.Persister;
@@ -63,7 +61,6 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
     private static final Protos.TaskStatus TASK_B_STATUS_ERROR =
             TaskTestUtils.generateStatus(TASK_B.getTaskId(), Protos.TaskState.TASK_ERROR);
 
-    private FrameworkStore frameworkStore;
     private StateStore stateStore;
 
     @Mock private ConfigStore<ServiceSpec> mockConfigStore;
@@ -77,21 +74,11 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
         Driver.setDriver(mockSchedulerDriver);
 
         Persister persister = new MemPersister();
-        frameworkStore = new FrameworkStore(persister);
-        frameworkStore.storeFrameworkId(TestConstants.FRAMEWORK_ID);
         stateStore = new StateStore(persister);
         stateStore.storeTasks(Collections.singletonList(TASK_A));
 
         // Have the mock plan customizer default to returning the plan unchanged.
         when(mockPlanCustomizer.updateUninstallPlan(any())).thenAnswer(invocation -> invocation.getArguments()[0]);
-    }
-
-    @Test
-    public void testEmptyDeployPlan() {
-        // Sanity check...
-        Assert.assertEquals(Constants.DEPLOY_PLAN_NAME, UninstallScheduler.EMPTY_DEPLOY_PLAN.getName());
-        Assert.assertEquals(Status.COMPLETE, UninstallScheduler.EMPTY_DEPLOY_PLAN.getStatus());
-        Assert.assertTrue(UninstallScheduler.EMPTY_DEPLOY_PLAN.getChildren().isEmpty());
     }
 
     @Test
@@ -227,18 +214,16 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
         Persister persister = new MemPersister();
         UninstallScheduler uninstallScheduler = new UninstallScheduler(
                 getServiceSpec(),
-                new FrameworkStore(persister),
                 new StateStore(persister),
                 mockConfigStore,
                 SchedulerConfigTestUtils.getTestSchedulerConfig(),
-                Optional.empty(), Optional.of(mockSecretsClient));
+                Optional.empty(),
+                Optional.of(mockSecretsClient));
         // Returns a simple placeholder plan with status COMPLETE
         PlanCoordinator planCoordinator = uninstallScheduler.getPlanCoordinator();
         Plan plan = planCoordinator.getPlanManagers().stream().findFirst().get().getPlan();
         Assert.assertTrue(plan.toString(), plan.isComplete());
         Assert.assertTrue(plan.getChildren().isEmpty());
-        // Doesn't want to register with Mesos:
-        Assert.assertFalse(uninstallScheduler.shouldRegisterFramework());
     }
 
     @Test
@@ -295,7 +280,6 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
     public void testUninstallPlanCustomizer() throws Exception {
         UninstallScheduler uninstallScheduler = new UninstallScheduler(
                 getServiceSpec(),
-                frameworkStore,
                 stateStore,
                 mockConfigStore,
                 SchedulerConfigTestUtils.getTestSchedulerConfig(),
@@ -332,7 +316,6 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
     private UninstallScheduler getUninstallScheduler(ServiceSpec serviceSpec) {
         UninstallScheduler uninstallScheduler = new UninstallScheduler(
                 serviceSpec,
-                frameworkStore,
                 stateStore,
                 mockConfigStore,
                 SchedulerConfigTestUtils.getTestSchedulerConfig(),
@@ -340,7 +323,7 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
                 Optional.of(mockSecretsClient));
         uninstallScheduler
                 .start()
-                .register(false);
+                .registered(false);
         return uninstallScheduler;
     }
 

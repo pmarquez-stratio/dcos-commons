@@ -27,6 +27,7 @@ import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.offer.ReserveOfferRecommendation;
 import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
 import com.mesosphere.sdk.scheduler.MesosEventClient.UnexpectedResourcesResponse;
+import com.mesosphere.sdk.storage.Persister;
 import com.mesosphere.sdk.testutils.ResourceTestUtils;
 import com.mesosphere.sdk.testutils.TestConstants;
 
@@ -46,6 +47,7 @@ public class OfferProcessorTest {
             .build();
 
     @Mock private MesosEventClient mockMesosEventClient;
+    @Mock private Persister mockPersister;
     @Mock private SchedulerDriver mockSchedulerDriver;
 
     private OfferProcessor processor;
@@ -55,7 +57,7 @@ public class OfferProcessorTest {
         MockitoAnnotations.initMocks(this);
         Driver.setDriver(mockSchedulerDriver);
 
-        processor = new OfferProcessor(mockMesosEventClient);
+        processor = new OfferProcessor(mockMesosEventClient, mockPersister);
     }
 
     @Test

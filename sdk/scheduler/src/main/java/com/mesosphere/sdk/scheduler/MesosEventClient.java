@@ -16,7 +16,14 @@ public interface MesosEventClient {
      *
      * @param reRegistered Whether this is an initial registration ({@code false}) or a re-registration ({@code true})
      */
-    public void register(boolean reRegistered);
+    public void registered(boolean reRegistered);
+
+    /**
+     * Called after the framework has been unregistered from Mesos following a call to {@link #offers(Collection)} which
+     * returned {@link OfferResponse#finished()} as a response. When this is called, the service should advertise the
+     * completion of the uninstall operation in its {@code deploy} plan.
+     */
+    public void unregistered();
 
     /**
      * Called when the framework has received offers from Mesos. The provided list may be empty.
@@ -119,7 +126,8 @@ public interface MesosEventClient {
 
         /**
          * Tells the caller that this client has finished processing and can be shut down. The caller should
-         * long-decline any unused offers
+         * long-decline any unused offers. After this is returned, the caller may then notify the client of framework
+         * deregistration by calling {@link MesosEventClient#unregistered()}, but this is not required.
          */
         public static OfferResponse finished() {
             return new OfferResponse(Result.FINISHED, Collections.emptyList());

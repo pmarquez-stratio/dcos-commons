@@ -323,7 +323,7 @@ public class ServiceTestRunner {
                 .setCustomConfigValidators(validators)
                 .build();
         FrameworkScheduler frameworkScheduler =
-                new FrameworkScheduler(serviceScheduler.getPersister(), serviceScheduler)
+                new FrameworkScheduler(persister, serviceScheduler)
                 .setReadyToAcceptOffers()
                 .disableThreading();
 

@@ -8,10 +8,8 @@ import com.mesosphere.sdk.scheduler.plan.*;
 import com.mesosphere.sdk.scheduler.uninstall.UninstallScheduler;
 import com.mesosphere.sdk.specification.ServiceSpec;
 import com.mesosphere.sdk.state.ConfigStore;
-import com.mesosphere.sdk.state.FrameworkStore;
 import com.mesosphere.sdk.state.StateStore;
 import com.mesosphere.sdk.state.StateStoreException;
-import com.mesosphere.sdk.storage.Persister;
 import com.mesosphere.sdk.storage.StorageError.Reason;
 
 import org.apache.mesos.Protos;
@@ -29,9 +27,7 @@ public abstract class ServiceScheduler implements MesosEventClient {
     private final Logger logger;
 
     private final String serviceName;
-    protected final FrameworkStore frameworkStore;
     protected final StateStore stateStore;
-    protected final SchedulerConfig schedulerConfig;
 
     private final AtomicBoolean started = new AtomicBoolean(false);
     protected final Optional<PlanCustomizer> planCustomizer;
@@ -43,17 +39,10 @@ public abstract class ServiceScheduler implements MesosEventClient {
     /**
      * Creates a new AbstractScheduler given a {@link StateStore}.
      */
-    protected ServiceScheduler(
-            String serviceName,
-            FrameworkStore frameworkStore,
-            StateStore stateStore,
-            SchedulerConfig schedulerConfig,
-            Optional<PlanCustomizer> planCustomizer) {
+    protected ServiceScheduler(String serviceName, StateStore stateStore, Optional<PlanCustomizer> planCustomizer) {
         this.logger = LoggingUtils.getLogger(getClass(), serviceName);
         this.serviceName = serviceName;
-        this.frameworkStore = frameworkStore;
         this.stateStore = stateStore;
-        this.schedulerConfig = schedulerConfig;
         this.planCustomizer = planCustomizer;
     }
 
@@ -94,13 +83,6 @@ public abstract class ServiceScheduler implements MesosEventClient {
     }
 
     /**
-     * Returns the underlying {@link Persister} being used to keep track of state/configs.
-     */
-    public Persister getPersister() {
-        return stateStore.getPersister();
-    }
-
-    /**
      * Returns the plans defined for this scheduler. Useful for scheduler tests.
      */
     @VisibleForTesting
@@ -111,7 +93,7 @@ public abstract class ServiceScheduler implements MesosEventClient {
     }
 
     @Override
-    public void register(boolean reRegistered) {
+    public void registered(boolean reRegistered) {
         if (!reRegistered) {
             this.reviveManager = new ReviveManager(serviceName);
             this.reconciler = new Reconciler(stateStore);

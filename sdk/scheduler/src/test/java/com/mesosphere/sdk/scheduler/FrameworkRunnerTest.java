@@ -8,12 +8,15 @@ import java.util.Optional;
 import org.apache.mesos.Protos;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import com.mesosphere.sdk.dcos.Capabilities;
 import com.mesosphere.sdk.dcos.DcosConstants;
+import com.mesosphere.sdk.offer.Constants;
+import com.mesosphere.sdk.scheduler.plan.Status;
 import com.mesosphere.sdk.testutils.TestConstants;
 
 import static org.mockito.Mockito.*;
@@ -26,6 +29,20 @@ public class FrameworkRunnerTest {
     public void beforeEach() {
         MockitoAnnotations.initMocks(this);
         Capabilities.overrideCapabilities(mockCapabilities);
+    }
+
+    @Test
+    public void testEmptyDeployPlan() {
+        // Sanity check...
+        Assert.assertEquals(Constants.DEPLOY_PLAN_NAME, FrameworkRunner.EMPTY_DEPLOY_PLAN.getName());
+        Assert.assertEquals(Status.COMPLETE, FrameworkRunner.EMPTY_DEPLOY_PLAN.getStatus());
+        Assert.assertTrue(FrameworkRunner.EMPTY_DEPLOY_PLAN.getChildren().isEmpty());
+    }
+
+    @Ignore("TODO(nickbp): test skeleton scheduler behavior when uninstall + no fwkid")
+    @Test
+    public void uninstallSkeletonScheduler() {
+        // TODO(nickbp): check skeleton scheduler launch
     }
 
     @Test

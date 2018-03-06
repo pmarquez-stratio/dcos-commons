@@ -54,14 +54,14 @@ public class FrameworkSchedulerTest {
         verify(mockFrameworkStore).storeFrameworkId(TestConstants.FRAMEWORK_ID);
         Assert.assertEquals(mockSchedulerDriver, Driver.getDriver().get());
         verifyDomainIsSet(MASTER_INFO.getDomain());
-        verify(mockMesosEventClient).register(false);
+        verify(mockMesosEventClient).registered(false);
         verify(mockOfferProcessor).start();
 
         // Call should be treated as a re-registration:
         scheduler.registered(mockSchedulerDriver2, TestConstants.FRAMEWORK_ID, MASTER_INFO2);
         Assert.assertEquals(mockSchedulerDriver2, Driver.getDriver().get());
         verifyDomainIsSet(MASTER_INFO2.getDomain());
-        verify(mockMesosEventClient).register(true);
+        verify(mockMesosEventClient).registered(true);
 
         // Not called a second time:
         verify(mockOfferProcessor, times(1)).start();

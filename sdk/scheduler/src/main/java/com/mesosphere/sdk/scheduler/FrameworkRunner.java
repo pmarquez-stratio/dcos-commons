@@ -3,12 +3,22 @@ package com.mesosphere.sdk.scheduler;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.TextFormat;
 import com.mesosphere.sdk.dcos.Capabilities;
+import com.mesosphere.sdk.http.endpoints.HealthResource;
+import com.mesosphere.sdk.http.endpoints.PlansResource;
+import com.mesosphere.sdk.offer.Constants;
+import com.mesosphere.sdk.offer.LoggingUtils;
+import com.mesosphere.sdk.scheduler.plan.DefaultPlan;
+import com.mesosphere.sdk.scheduler.plan.DefaultPlanManager;
+import com.mesosphere.sdk.scheduler.plan.Plan;
+import com.mesosphere.sdk.scheduler.plan.PlanManager;
+import com.mesosphere.sdk.state.FrameworkStore;
 import com.mesosphere.sdk.storage.Persister;
+import com.mesosphere.sdk.storage.PersisterException;
+import com.mesosphere.sdk.storage.PersisterUtils;
+
 import org.apache.commons.lang3.StringUtils;
 import org.apache.mesos.Protos;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.*;
 
 /**
@@ -16,7 +26,13 @@ import java.util.*;
  */
 public class FrameworkRunner {
     private static final int TWO_WEEK_SEC = 2 * 7 * 24 * 60 * 60;
-    private static final Logger LOGGER = LoggerFactory.getLogger(FrameworkRunner.class);
+    private static final Logger LOGGER = LoggingUtils.getLogger(FrameworkRunner.class);
+
+    /**
+     * Empty complete deploy plan to be used if the scheduler is uninstalling and was launched in a finished state.
+     */
+    @VisibleForTesting
+    static final Plan EMPTY_DEPLOY_PLAN = new DefaultPlan(Constants.DEPLOY_PLAN_NAME, Collections.emptyList());
 
     private final SchedulerConfig schedulerConfig;
     private final FrameworkConfig frameworkConfig;
@@ -34,15 +50,43 @@ public class FrameworkRunner {
         this.usingGpus = usingGpus;
     }
 
-    // NOTE: in multi-service case, use a single MultiMesosEventClient.
+    /**
+     * Registers the framework with Mesos and starts running the framework. This function should never return.
+     */
     public void registerAndRunFramework(Persister persister, MesosEventClient mesosEventClient) {
+        // During uninstall, the Framework ID is the last thing to be removed (along with the rest of zk). If it's gone
+        // and the framework is still in uninstall mode, and that indicates we previously finished an uninstall and
+        // then got restarted before getting pruned from Marathon.
+        // If we tried to register again, it would be with an unset framework id, which would in turn result in us
+        // registering a new framework with Mesos from scratch. We avoid that situation by instead just running the
+        // process in a bare-bones state where it's only serving the endpoints necessary for Cosmos to remove the
+        // process it from Marathon, and where it's not actually registering with Mesos.
+        if (schedulerConfig.isUninstallEnabled() && !new FrameworkStore(persister).fetchFrameworkId().isPresent()) {
+            LOGGER.info("Not registering with Mesos because uninstall is complete.");
+
+            try {
+                // Just in case, try to clear any other remaining data from ZK. In practice there shouldn't be any left?
+                PersisterUtils.clearAllData(persister);
+            } catch (PersisterException e) {
+                throw new IllegalStateException("Unable to clear all data", e);
+            }
+
+            runSkeletonScheduler(schedulerConfig);
+            // The skeleton scheduler should never exit. But just in case...:
+            SchedulerUtils.hardExit(SchedulerErrorCode.DRIVER_EXITED);
+        }
+
         FrameworkScheduler frameworkScheduler = new FrameworkScheduler(persister, mesosEventClient);
-        SchedulerApiServer.start(
+        SchedulerApiServer httpServer = SchedulerApiServer.start(
                 schedulerConfig,
                 mesosEventClient.getHTTPEndpoints(),
                 new Runnable() {
             @Override
             public void run() {
+                // Notify the framework that it can start accepting offers. This is to avoid the following scenario:
+                // - We accept an offer/launch a task
+                // - The task has config templates to be retrieved from the scheduler HTTP service...
+                // - ... but the scheduler hasn't finishing launching its HTTP service
                 frameworkScheduler.setReadyToAcceptOffers();
             }
         });
@@ -56,9 +100,11 @@ public class FrameworkRunner {
         LOGGER.error("Scheduler driver exited with status: {}", status);
         // DRIVER_STOPPED will occur when we call stop(boolean) during uninstall.
         // When this happens, we want to continue running so that we can advertise that the uninstall plan is complete.
-        if (status != Protos.Status.DRIVER_STOPPED) {
-            SchedulerUtils.hardExit(SchedulerErrorCode.DRIVER_EXITED);
+        if (status == Protos.Status.DRIVER_STOPPED) {
+            // Following Mesos driver thread exit, attach to the API server thread. It should run indefinitely.
+            httpServer.join();
         }
+        SchedulerUtils.hardExit(SchedulerErrorCode.DRIVER_EXITED);
     }
 
     @VisibleForTesting
@@ -102,6 +148,31 @@ public class FrameworkRunner {
         }
 
         return fwkInfoBuilder.build();
+    }
+
+    /**
+     * Launches a 'skeleton' scheduler which does nothing other than advertise a completed {@code deploy} plan. This is
+     * used in cases where the scheduler is fully uninstalled and is just waiting to get removed from Marathon.
+     */
+    private void runSkeletonScheduler(SchedulerConfig schedulerConfig) {
+        PlanManager uninstallPlanManager = DefaultPlanManager.createProceeding(EMPTY_DEPLOY_PLAN);
+        // Bare minimum resources to appear healthy/complete to DC/OS:
+        Collection<Object> resources = Arrays.asList(
+                // /v1/plans/deploy: Invoked by Cosmos to tell whether we can be removed from Marathon.
+                //                   This is hard-coded in Cosmos.
+                new PlansResource(Collections.singletonList(uninstallPlanManager)),
+                // /v1/health: Invoked by Mesos as directed a configured health check in the scheduler Marathon app.
+                new HealthResource(Collections.singletonList(uninstallPlanManager)));
+        SchedulerApiServer httpServer = SchedulerApiServer.start(
+                schedulerConfig,
+                resources,
+                new Runnable() {
+            @Override
+            public void run() {
+                LOGGER.info("Started trivially healthy API server.");
+            }
+        });
+        httpServer.join();
     }
 
     @SuppressWarnings("deprecation") // mute warning for FrameworkInfo.setRole()

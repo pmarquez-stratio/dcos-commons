@@ -274,8 +274,6 @@ public class PodInfoBuilder {
             taskInfoBuilder.setDiscovery(getDiscoveryInfo(taskSpec.getDiscovery().get(), podInstance.getIndex()));
         }
 
-        //TODO(nickbp): This ContainerInfo handling has turned a bit spaghetti-like and needs cleaning up.
-        //              Currently blindly retaining prior behavior.
         if (useDefaultExecutor) {
             taskInfoBuilder.setContainer(getContainerInfo(podInstance.getPod(), true, true));
         } else if (!podInstance.getPod().getNetworks().isEmpty()) {

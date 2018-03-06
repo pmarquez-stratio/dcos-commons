@@ -18,13 +18,11 @@ import com.mesosphere.sdk.scheduler.plan.PlanCoordinator;
 import com.mesosphere.sdk.scheduler.plan.Step;
 import com.mesosphere.sdk.specification.ServiceSpec;
 import com.mesosphere.sdk.state.ConfigStore;
-import com.mesosphere.sdk.state.FrameworkStore;
 import com.mesosphere.sdk.state.StateStore;
 import com.mesosphere.sdk.state.StateStoreUtils;
 import com.mesosphere.sdk.storage.MemPersister;
 import com.mesosphere.sdk.storage.Persister;
 import com.mesosphere.sdk.storage.PersisterException;
-import com.mesosphere.sdk.testutils.SchedulerConfigTestUtils;
 import com.mesosphere.sdk.testutils.TestConstants;
 
 /**
@@ -32,7 +30,6 @@ import com.mesosphere.sdk.testutils.TestConstants;
  */
 public class ServiceSchedulerTest {
 
-    private FrameworkStore frameworkStore;
     private StateStore stateStore;
 
     @Mock private SchedulerDriver mockSchedulerDriver;
@@ -46,7 +43,6 @@ public class ServiceSchedulerTest {
         Driver.setDriver(mockSchedulerDriver);
 
         Persister persister = new MemPersister();
-        frameworkStore = new FrameworkStore(persister);
         stateStore = new StateStore(persister);
     }
 
@@ -84,17 +80,16 @@ public class ServiceSchedulerTest {
     }
 
     private TestScheduler getScheduler() {
-        TestScheduler scheduler =
-                new TestScheduler(frameworkStore, stateStore, SchedulerConfigTestUtils.getTestSchedulerConfig());
+        TestScheduler scheduler = new TestScheduler(stateStore);
         // Start and register.
-        scheduler.start().register(false);
+        scheduler.start().registered(false);
         return scheduler;
     }
 
     private class TestScheduler extends ServiceScheduler {
 
-        protected TestScheduler(FrameworkStore frameworkStore, StateStore stateStore, SchedulerConfig schedulerConfig) {
-            super("test-svc", frameworkStore, stateStore, schedulerConfig, Optional.empty());
+        protected TestScheduler(StateStore stateStore) {
+            super("test-svc",  stateStore, Optional.empty());
             when(mockPlanCoordinator.getPlanManagers()).thenReturn(Collections.emptyList());
             when(mockPlanCoordinator.getCandidates()).thenReturn(Collections.emptyList());
         }
@@ -116,6 +111,11 @@ public class ServiceSchedulerTest {
 
         @Override
         protected void registeredWithMesos() {
+            // Intentionally empty.
+        }
+
+        @Override
+        public void unregistered() {
             // Intentionally empty.
         }
 

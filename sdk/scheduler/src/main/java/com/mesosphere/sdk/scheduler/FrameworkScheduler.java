@@ -42,7 +42,7 @@ public class FrameworkScheduler implements Scheduler {
     private final OfferProcessor offerProcessor;
 
     public FrameworkScheduler(Persister persister, MesosEventClient mesosEventClient) {
-        this(new FrameworkStore(persister), mesosEventClient, new OfferProcessor(mesosEventClient));
+        this(new FrameworkStore(persister), mesosEventClient, new OfferProcessor(mesosEventClient, persister));
     }
 
     @VisibleForTesting
@@ -100,7 +100,7 @@ public class FrameworkScheduler implements Scheduler {
         }
 
         updateStaticData(driver, masterInfo);
-        mesosEventClient.register(false);
+        mesosEventClient.registered(false);
 
         offerProcessor.start();
     }
@@ -109,7 +109,7 @@ public class FrameworkScheduler implements Scheduler {
     public void reregistered(SchedulerDriver driver, Protos.MasterInfo masterInfo) {
         LOGGER.info("Re-registered with master: {}", TextFormat.shortDebugString(masterInfo));
         updateStaticData(driver, masterInfo);
-        mesosEventClient.register(true);
+        mesosEventClient.registered(true);
     }
 
     @Override

@@ -35,7 +35,6 @@ import com.mesosphere.sdk.specification.yaml.RawServiceSpec;
 import com.mesosphere.sdk.state.ConfigStore;
 import com.mesosphere.sdk.state.ConfigStoreException;
 import com.mesosphere.sdk.state.FrameworkStore;
-import com.mesosphere.sdk.state.SchemaVersionStore;
 import com.mesosphere.sdk.state.StateStore;
 import com.mesosphere.sdk.state.StateStoreUtils;
 import com.mesosphere.sdk.storage.Persister;
@@ -51,10 +50,6 @@ import java.util.stream.Collectors;
  * Creates a new {@link DefaultScheduler}.
  */
 public class SchedulerBuilder {
-
-    /** @see SchemaVersionStore */
-    private static final int SUPPORTED_SCHEMA_VERSION_WITHOUT_NAMESPACE = 1;
-    private static final int SUPPORTED_SCHEMA_VERSION_WITH_NAMESPACE = 2;
 
     private final Logger logger;
     private final SchedulerConfig schedulerConfig;
@@ -81,6 +76,8 @@ public class SchedulerBuilder {
     }
 
     SchedulerBuilder(ServiceSpec serviceSpec, SchedulerConfig schedulerConfig, Persister persister) {
+        // NOTE: we specifically avoid accessing the provided persister before build() is called.
+        // This is to ensure that upstream has a chance to e.g. lock it via CuratorLocker.
         this.logger = LoggingUtils.getLogger(getClass(), serviceSpec.getName());
         this.serviceSpec = serviceSpec;
         this.schedulerConfig = schedulerConfig;
@@ -99,6 +96,14 @@ public class SchedulerBuilder {
      */
     public SchedulerConfig getSchedulerConfig() {
         return schedulerConfig;
+    }
+
+    /**
+     * Returns the {@link Persister} object which was provided via the constructor, or which was created by default
+     * internally.
+     */
+    public Persister getPersister() {
+        return persister;
     }
 
     /**
@@ -193,48 +198,47 @@ public class SchedulerBuilder {
      * @throws IllegalArgumentException if validating the provided configuration failed
      */
     public ServiceScheduler build() {
+        // NOTE: we specifically avoid accessing the provided persister before build() is called.
+        // This is to ensure that upstream has a chance to e.g. lock it via CuratorLocker.
 
-        // IMPORTANT: We specifically avoid touching the persister's content until build() is called. This mainly comes
-        // up in the Curator case, where we specifically want to invoke CuratorLocker before accessing the storage.
-
-        // FIRST, check and/or initialize schema version before doing any other storage access:
-        int expectedVersion = storageNamespace.isPresent()
-                ? SUPPORTED_SCHEMA_VERSION_WITH_NAMESPACE
-                : SUPPORTED_SCHEMA_VERSION_WITHOUT_NAMESPACE;
-        new SchemaVersionStore(persister).check(expectedVersion);
-
-        // THEN, initialize storage access:
-        FrameworkStore frameworkStore = new FrameworkStore(persister);
-        // When multi-service is enabled, store state/configs within a namespace matching the service name.
-        // Otherwise use an empty namespace (the default).
-        String storageNamespace = this.storageNamespace.orElse("");
-        StateStore stateStore = new StateStore(persister, storageNamespace);
+        // When multi-service is enabled, state/configs are stored within a namespace matching the service name.
+        // Otherwise use an empty namespace, which indicates single-service mode.
+        String storageNamespaceStr = storageNamespace.orElse("");
+        StateStore stateStore = new StateStore(persister, storageNamespaceStr);
         ConfigStore<ServiceSpec> configStore = new ConfigStore<>(
-                DefaultServiceSpec.getConfigurationFactory(serviceSpec), persister, storageNamespace);
+                DefaultServiceSpec.getConfigurationFactory(serviceSpec), persister, storageNamespaceStr);
 
         if (schedulerConfig.isUninstallEnabled()) {
-            if (!StateStoreUtils.isUninstalling(stateStore)) {
-                logger.info("Service has been told to uninstall. Marking this in the persistent state store. " +
-                        "Uninstall cannot be canceled once enabled.");
-                StateStoreUtils.setUninstalling(stateStore);
-            }
+            // FRAMEWORK UNINSTALL: The scheduler and all its service(s) are being uninstalled. Launch this service in
+            // uninstall mode. UninstallScheduler will internally flag the stateStore with an uninstall bit if needed.
+            return new UninstallScheduler(
+                    serviceSpec, stateStore, configStore, schedulerConfig, Optional.ofNullable(planCustomizer));
+        }
 
-            return new UninstallScheduler(serviceSpec, frameworkStore, stateStore, configStore,
-                    schedulerConfig, Optional.ofNullable(planCustomizer));
-        } else {
-            if (StateStoreUtils.isUninstalling(stateStore)) {
+        if (StateStoreUtils.isUninstalling(stateStore)) {
+            // SERVICE UNINSTALL: The service has an uninstall bit set in its (potentially namespaced) state store.
+            if (storageNamespace.isPresent()) {
+                // This namespaced service is partway through being removed from the parent multi-service scheduler.
+                // Launch the service in uninstall mode so that it can continue with whatever may be left.
+                return new UninstallScheduler(
+                        serviceSpec, stateStore, configStore, schedulerConfig, Optional.ofNullable(planCustomizer));
+            } else {
+                // This is an illegal state for a single-service scheduler. SchedulerConfig's uninstall bit should have
+                // also been enabled. If we got here, it means that the user likely tampered with the scheduler env
+                // after having previously triggered an uninstall, which had set the bit in stateStore. Just exit,
+                // because the service is likely now in an inconsistent state resulting from the incomplete uninstall.
                 logger.error("Service has been previously told to uninstall, this cannot be reversed. " +
                         "Reenable the uninstall flag to complete the process.");
                 SchedulerUtils.hardExit(SchedulerErrorCode.SCHEDULER_ALREADY_UNINSTALLING);
             }
+        }
 
-            try {
-                return getDefaultScheduler(frameworkStore, stateStore, configStore);
-            } catch (ConfigStoreException e) {
-                logger.error("Failed to construct scheduler.", e);
-                SchedulerUtils.hardExit(SchedulerErrorCode.INITIALIZATION_FAILURE);
-                return null; // This is so the compiler doesn't complain.  The scheduler is going down anyway.
-            }
+        try {
+            return getDefaultScheduler(new FrameworkStore(persister), stateStore, configStore);
+        } catch (ConfigStoreException e) {
+            logger.error("Failed to construct scheduler.", e);
+            SchedulerUtils.hardExit(SchedulerErrorCode.INITIALIZATION_FAILURE);
+            return null; // This is so the compiler doesn't complain.  The scheduler is going down anyway.
         }
     }
 

@@ -29,7 +29,12 @@ public class Main {
         EnvStore envStore = EnvStore.fromEnv();
         SchedulerConfig schedulerConfig = SchedulerConfig.fromEnvStore(envStore);
         FrameworkConfig frameworkConfig = FrameworkConfig.fromEnvStore(envStore);
-        JobsEventClient client = new JobsEventClient(schedulerConfig);
+        JobsEventClient client = new JobsEventClient(schedulerConfig, new JobsEventClient.UninstallCallback() {
+            @Override
+            public void uninstalled(String name) {
+                LOGGER.info("Job has completed uninstall: {}", name);
+            }
+        });
 
         // First initialize the QueueRunner to get the (cached) persister that will be reused by individual jobs
         // (within their own namespaces)
@@ -59,6 +64,7 @@ public class Main {
                     // - Config templates are served by JobsArtifactResource rather than default ArtifactResource
                     .setTemplateUrlFactory(JobsArtifactResource.getUrlFactory(
                             frameworkConfig.getFrameworkName(), serviceSpec.getName()))
+                    // If the service was previously marked for uninstall, it will be built as an UninstallScheduler
                     .build());
         }
 

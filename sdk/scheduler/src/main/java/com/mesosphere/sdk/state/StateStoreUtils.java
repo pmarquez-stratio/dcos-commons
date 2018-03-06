@@ -215,14 +215,17 @@ public class StateStoreUtils {
     }
 
     /**
-     * Returns the current value of the 'uninstall' property in the provided {@link StateStore}.
+     * Returns the current value of the 'uninstall' property in the provided {@link StateStore}. If the
+     * {@link StateStore} was created against a namespaced service, then this returns whether that service is
+     * uninstalling.
      */
     public static boolean isUninstalling(StateStore stateStore) throws StateStoreException {
         return fetchBooleanProperty(stateStore, UNINSTALLING_PROPERTY_KEY);
     }
 
     /**
-     * Sets an 'uninstall' property in the provided {@link StateStore} to {@code true}.
+     * Sets an 'uninstall' property in the provided {@link StateStore} to {@code true}. If the {@link StateStore} was
+     * created against a namespaced service, then this returns whether that service is uninstalling.
      */
     public static void setUninstalling(StateStore stateStore) {
         setBooleanProperty(stateStore, UNINSTALLING_PROPERTY_KEY, true);

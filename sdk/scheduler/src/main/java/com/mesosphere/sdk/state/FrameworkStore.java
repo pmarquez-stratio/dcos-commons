@@ -4,9 +4,9 @@ import java.util.Optional;
 
 import org.apache.mesos.Protos;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.mesosphere.sdk.offer.LoggingUtils;
 import com.mesosphere.sdk.storage.Persister;
 import com.mesosphere.sdk.storage.PersisterException;
 import com.mesosphere.sdk.storage.StorageError.Reason;
@@ -21,8 +21,7 @@ import com.mesosphere.sdk.storage.StorageError.Reason;
  */
 public class FrameworkStore {
 
-    private static final Logger logger = LoggerFactory.getLogger(FrameworkStore.class);
-
+    private static final Logger LOGGER = LoggingUtils.getLogger(FrameworkStore.class);
     private static final String FWK_ID_PATH_NAME = "FrameworkID";
 
     private final Persister persister;
@@ -68,7 +67,7 @@ public class FrameworkStore {
         } catch (PersisterException e) {
             if (e.getReason() == Reason.NOT_FOUND) {
                 // Clearing a non-existent FrameworkID should not result in an exception from us.
-                logger.warn("Cleared unset FrameworkID, continuing silently", e);
+                LOGGER.warn("Cleared unset FrameworkID, continuing silently", e);
             } else {
                 throw new StateStoreException(e);
             }
@@ -92,7 +91,7 @@ public class FrameworkStore {
             }
         } catch (PersisterException e) {
             if (e.getReason() == Reason.NOT_FOUND) {
-                logger.warn("No FrameworkId found at: {}", FWK_ID_PATH_NAME);
+                LOGGER.warn("No FrameworkId found at: {}", FWK_ID_PATH_NAME);
                 return Optional.empty();
             } else {
                 throw new StateStoreException(e);

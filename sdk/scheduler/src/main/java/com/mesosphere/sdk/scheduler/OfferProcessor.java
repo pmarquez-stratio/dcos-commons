@@ -29,6 +29,9 @@ import com.mesosphere.sdk.offer.UnreserveOfferRecommendation;
 import com.mesosphere.sdk.queue.OfferQueue;
 import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
 import com.mesosphere.sdk.scheduler.MesosEventClient.UnexpectedResourcesResponse;
+import com.mesosphere.sdk.storage.Persister;
+import com.mesosphere.sdk.storage.PersisterException;
+import com.mesosphere.sdk.storage.PersisterUtils;
 
 /**
  * Handles offer processing for the framework, passing offers to an underlying {@link MesosEventClient}, which itself
@@ -41,6 +44,9 @@ class OfferProcessor {
     // Avoid attempting to process offers until initialization has completed via the first call to registered().
     private final AtomicBoolean isInitialized = new AtomicBoolean(false);
 
+    // After deregistration has occurred, drop offers without trying to decline them (driver not running anymore!)
+    private final AtomicBoolean isDeregistered = new AtomicBoolean(false);
+
     // Executor for processing offers off the queue in {@link #start()}.
     private final ExecutorService offerExecutor = Executors.newSingleThreadExecutor();
 
@@ -48,6 +54,7 @@ class OfferProcessor {
     private final Set<Protos.OfferID> offersInProgress = new HashSet<>();
 
     private final MesosEventClient mesosEventClient;
+    private final Persister persister;
     private final OfferAccepter offerAccepter;
 
     // May be overridden in tests:
@@ -55,8 +62,9 @@ class OfferProcessor {
     // Whether we should run in multithreaded mode. Should only be disabled for tests.
     private boolean multithreaded;
 
-    public OfferProcessor(MesosEventClient mesosEventClient) {
+    public OfferProcessor(MesosEventClient mesosEventClient, Persister persister) {
         this.mesosEventClient = mesosEventClient;
+        this.persister = persister;
         this.offerAccepter = new OfferAccepter();
         this.offerQueue = new OfferQueue();
         this.multithreaded = true;
@@ -208,6 +216,11 @@ class OfferProcessor {
     }
 
     private void evaluateOffers(List<Protos.Offer> offers) {
+        if (isDeregistered.get()) {
+            LOGGER.info("Dropping {} queued offers: Framework is deregistered", offers.size());
+            return;
+        }
+
         // Offer evaluation:
         // The client (which is composed of one or more services) looks at the provided offers and returns a list of
         // operations to perform and offers which were not used. On our end, we then perform the requested operations
@@ -216,8 +229,12 @@ class OfferProcessor {
         LOGGER.info("Offer result: {} with {} recommendations for {} offers",
                 offerResponse.result, offerResponse.recommendations.size(), offers.size());
         if (offerResponse.result == OfferResponse.Result.FINISHED) {
-            // TODO(nickbp): UNINSTALL The framework can finish shutdown now
+            // The service has finished uninstalling. Unregister and delete the framework.
+            destroyFramework();
+            isDeregistered.set(true);
+            return;
         }
+
         Collection<Protos.Offer> unusedOffers =
                 OfferUtils.filterOutAcceptedOffers(offers, offerResponse.recommendations);
 
@@ -258,6 +275,39 @@ class OfferProcessor {
         allRecommendations.addAll(cleanupRecommendations);
         Metrics.incrementRecommendations(allRecommendations);
         offerAccepter.accept(allRecommendations);
+    }
+
+    /**
+     * Destroys the framework.
+     */
+    private void destroyFramework() {
+        // Wipe all data from ZK. This includes the framework ID, which is used to detect across restarts that the
+        // framework has been destroyed.
+        LOGGER.info("Deleting state store...");
+        try {
+            PersisterUtils.clearAllData(persister);
+        } catch (PersisterException e) {
+            throw new IllegalStateException("Failed to delete all persister data", e);
+        }
+
+        LOGGER.info("Tearing down framework...");
+        Optional<SchedulerDriver> driver = Driver.getDriver();
+        if (driver.isPresent()) {
+            // Stop the SchedulerDriver thread:
+            // - failover==false: Tells Mesos to teardown the framework.
+            // - This call will cause FrameworkRunner's SchedulerDriver.run() call to return DRIVER_STOPPED.
+            driver.get().stop(false);
+        } else {
+            LOGGER.error("No driver is present for deregistering the framework.");
+        }
+
+        LOGGER.info("### UNINSTALL IS COMPLETE! ###");
+        LOGGER.info("Scheduler should be cleaned up shortly...");
+
+        // Notify the client that deregistration has completed, following them giving us a FINISHED response to offers.
+        // They can then set their "deploy" plan to Complete, which will in turn let Cosmos know that this scheduler
+        // process can be pruned from Marathon.
+        mesosEventClient.unregistered();
     }
 
     /**

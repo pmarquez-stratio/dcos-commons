@@ -66,6 +66,12 @@ public class HealthResourceTest {
         checkHealthStatus(Response.Status.OK);
     }
 
+    @Test
+    public void testNoPlans() {
+        resource = new HealthResource(Collections.emptyList());
+        checkHealthStatus(Response.Status.OK);
+    }
+
     private void checkHealthStatus(Response.Status status) {
         Response response = resource.getHealth();
         Assert.assertEquals(status, response.getStatusInfo());

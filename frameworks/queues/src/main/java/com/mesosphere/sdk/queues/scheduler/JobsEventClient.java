@@ -17,6 +17,7 @@ import com.google.protobuf.TextFormat;
 import com.mesosphere.sdk.http.endpoints.*;
 import com.mesosphere.sdk.http.types.StringPropertyDeserializer;
 import com.mesosphere.sdk.offer.CommonIdUtils;
+import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.offer.LoggingUtils;
 import com.mesosphere.sdk.offer.OfferRecommendation;
 import com.mesosphere.sdk.offer.OfferUtils;
@@ -28,6 +29,12 @@ import com.mesosphere.sdk.scheduler.MesosEventClient;
 import com.mesosphere.sdk.scheduler.OfferResources;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.scheduler.ServiceScheduler;
+import com.mesosphere.sdk.scheduler.plan.DefaultPhase;
+import com.mesosphere.sdk.scheduler.plan.DefaultPlan;
+import com.mesosphere.sdk.scheduler.plan.DefaultPlanManager;
+import com.mesosphere.sdk.scheduler.plan.Plan;
+import com.mesosphere.sdk.scheduler.plan.strategy.SerialStrategy;
+import com.mesosphere.sdk.scheduler.uninstall.DeregisterStep;
 import com.mesosphere.sdk.scheduler.uninstall.UninstallScheduler;
 
 /**
@@ -35,27 +42,61 @@ import com.mesosphere.sdk.scheduler.uninstall.UninstallScheduler;
  */
 public class JobsEventClient implements MesosEventClient {
 
+    /**
+     * Interface for notifying the caller that added jobs have completed uninstall.
+     */
+    public interface UninstallCallback {
+        /**
+         * Invoked when a given job has completed its uninstall as triggered by
+         * {@link JobsEventClient#uninstallJob(String)}. After this has been called, re-adding the job to the
+         * {@link JobsEventClient} will result in launching a new instance from scratch.
+         *
+         * @param jobName the name of the job which has completed uninstall and which has been freed from the client
+         */
+        void uninstalled(String jobName);
+    }
+
     private static final Logger LOGGER = LoggingUtils.getLogger(JobsEventClient.class);
 
-    private final boolean isUninstalling;
+    private final DeregisterStep deregisterStep;
+    private final Optional<Plan> uninstallPlan;
     private final DefaultJobInfoProvider jobInfoProvider;
+    private final UninstallCallback uninstallCallback;
 
-    public JobsEventClient(SchedulerConfig schedulerConfig) {
-        this.isUninstalling = schedulerConfig.isUninstallEnabled();
+    public JobsEventClient(SchedulerConfig schedulerConfig, UninstallCallback uninstallCallback) {
         this.jobInfoProvider = new DefaultJobInfoProvider();
+        this.uninstallCallback = uninstallCallback;
+
+        if (schedulerConfig.isUninstallEnabled()) {
+            this.deregisterStep = new DeregisterStep();
+            this.uninstallPlan = Optional.of(
+                    new DefaultPlan(Constants.DEPLOY_PLAN_NAME, Collections.singletonList(
+                            new DefaultPhase(
+                                    "deregister-framework",
+                                    Collections.singletonList(deregisterStep),
+                                    new SerialStrategy<>(),
+                                    Collections.emptyList()))));
+        } else {
+            this.deregisterStep = null;
+            this.uninstallPlan = Optional.empty();
+        }
     }
 
     /**
-     * Adds a job which is mapped for the specified name.
+     * Adds a job which is mapped for the specified name. Note: If the job was marked for uninstall via
+     * {@link #uninstallJob(String)}, it should continue to be added across scheduler restarts in order for uninstall to
+     * complete. It should only be omitted after the uninstall callback has been invoked for it.
      *
      * @param job the client to add
      * @return {@code this}
-     * @throws IllegalArgumentException if the name is already present
+     * @throws IllegalArgumentException if the job name is already present
      */
     public JobsEventClient putJob(ServiceScheduler job) {
         Map<String, ServiceScheduler> jobs = jobInfoProvider.lockRW();
         LOGGER.info("Adding service: {} (now {} services)", job.getName(), jobs.size() + 1);
         try {
+            // NOTE: If the job is uninstalling, it should already be passed to us as an UninstallScheduler.
+            // See SchedulerBuilder.
             ServiceScheduler previousJob = jobs.put(job.getName(), job);
             if (previousJob != null) {
                 // Put the old client back before throwing...
@@ -71,20 +112,27 @@ public class JobsEventClient implements MesosEventClient {
 
     /**
      * Triggers an uninstall for a job, removing it from the list of jobs when it has finished. Does nothing if the job
-     * is already uninstalling.
+     * is already uninstalling. If the scheduler process is restarted, the job must be added again via {@link putJob},
+     * at which point it will automatically resume uninstalling.
      *
      * @param name the name of the job to be uninstalled
      * @return {@code this}
      * @throws IllegalArgumentException if the name does not exist
      */
     public JobsEventClient uninstallJob(String name) {
-        // TODO(nickbp): UNINSTALL Need to persist the fact that this job is uninstalling and automatically resume
-        // uninstalling it if the scheduler gets restarted. Flow:
-        // - UninstallScheduler sets the bit within the storage namespace when uninstall starts (moved from always-root)
-        // - SchedulerBuilder checks for the bit (in addition to current SchedulerConfig bit)
-        // - Assuming that upstream consistently uses SchedulerBuilder, we should get UninstallSchedulers added
-        //   automatically. BUT we need a way to tell upstream when they should or shouldn't be creating the schedulers.
-        //   Maybe have a service that just automatically rebuilds schedulers based off of zk/config storage?
+        // UNINSTALL FLOW:
+        // 1. uninstallJob("foo") is called. This converts the job to an UninstallScheduler.
+        // 2. UninstallScheduler internally flags its StateStore with an uninstall bit if one is not already present.
+        // 3. The UninstallScheduler proceeds to clean up the service.
+        // 4. In the event of a scheduler process restart during cleanup:
+        //   a. Upstream builds a new foo using SchedulerBuilder, which internally finds the uninstall bit and returns a
+        //      new UninstallScheduler
+        //   b. putJob(foo) is called with the UninstallScheduler
+        //   c. The UninstallScheduler resumes cleanup from where it left off...
+        // 5. Sometime after the UninstallScheduler finishes cleanup, it returns FINISHED in response to offers.
+        // 6. We remove the job and invoke uninstallCallback.uninstalled(), telling upstream that it's gone. If upstream
+        //    invokes putJob(foo) again at this point, the job will be relaunched from scratch because the uninstall bit
+        //    in ZK will have been cleared.
         Map<String, ServiceScheduler> jobs = jobInfoProvider.lockRW();
         LOGGER.info("Marking service as uninstalling: {} (out of {} services)", name, jobs.size());
         try {
@@ -98,9 +146,15 @@ public class JobsEventClient implements MesosEventClient {
                 LOGGER.warn("Told to uninstall service '{}', but it is already uninstalling", name);
                 return this;
             }
-            // Convert the DefaultScheduler to an UninstallScheduler, which will then perform the uninstall. When it has
-            // completed, it will return FINISHED to its next offers() call, at which point we will remove it.
+
+            // Convert the DefaultScheduler to an UninstallScheduler. It will automatically flag itself with an
+            // uninstall bit in its state store and then proceed with the uninstall. When the uninstall has completed,
+            // it will return FINISHED to its next offers() call, at which point we will remove it. If the scheduler
+            // process is restarted before uninstall has completed, the caller should have added it back via putJob().
+            // When it's added back, it should be have already been converted to an UninstallScheduler. See
+            // SchedulerBuilder.
             jobs.put(name, ((DefaultScheduler) currentJob).toUninstallScheduler());
+
             return this;
         } finally {
             jobInfoProvider.unlockRW();
@@ -108,15 +162,24 @@ public class JobsEventClient implements MesosEventClient {
     }
 
     @Override
-    public void register(boolean reRegistered) {
+    public void registered(boolean reRegistered) {
         Collection<ServiceScheduler> jobs = jobInfoProvider.lockAllR();
         LOGGER.info("Notifying {} services of {}",
                 jobs.size(), reRegistered ? "re-registration" : "initial registration");
         try {
-            jobs.stream().forEach(c -> c.register(reRegistered));
+            jobs.stream().forEach(c -> c.registered(reRegistered));
         } finally {
             jobInfoProvider.unlockR();
         }
+    }
+
+    @Override
+    public void unregistered() {
+        if (!uninstallPlan.isPresent()) {
+            // This should have only happened after we returned OfferResponse.finished() below
+            throw new IllegalStateException("unregistered() called, but the we are not uninstalling");
+        }
+        deregisterStep.setComplete();
     }
 
     /**
@@ -146,9 +209,10 @@ public class JobsEventClient implements MesosEventClient {
                 jobs.size(), jobs.size() == 1 ? "" : "s");
         try {
             if (jobs.isEmpty()) {
-                if (isUninstalling) {
+                if (uninstallPlan.isPresent()) {
                     // We're uninstalling everything and all jobs have been cleaned up. Tell the caller that they can
-                    // finish with final framework cleanup.
+                    // finish with final framework cleanup. After they've finished, they will invoke unregistered(), at
+                    // which point we can set our deploy plan to complete.
                     return OfferResponse.finished();
                 } else {
                     // If we don't have any clients, then WE aren't ready. Decline short.
@@ -205,6 +269,12 @@ public class JobsEventClient implements MesosEventClient {
                 jobInfoProvider.unlockRW();
             }
 
+            // Just in case, avoid invoking the uninstall callback until we are in an unlocked state. This avoids
+            // deadlock if the callback itself calls back into us for any reason. This also ensures that we aren't
+            // blocking other operations (e.g. offer/status handling) while these callbacks are running.
+            for (String job : jobsToRemove) {
+                uninstallCallback.uninstalled(job);
+            }
         }
 
         return anyNotReady
@@ -373,11 +443,12 @@ public class JobsEventClient implements MesosEventClient {
     @Override
     public Collection<Object> getHTTPEndpoints() {
         return Arrays.asList(
-                // TODO(nickbp): this will be ALWAYS HEALTHY... Options:
-                // - add some plans from a parent queue scheduler? (if we should have one)
-                // - implement a custom HealthResource which isn't plan-based?
-                // this likely ties into uninstall mode. need to tell cosmos when we're done uninstalling
-                new HealthResource(Collections.emptyList()),
+                // Note: In default deployment, this endpoint will be ALWAYS HEALTHY... Options:
+                // - Add a deploy plan for the parent queue, if/when one exists?
+                // - Implement a custom HealthResource which isn't plan-based?
+                new HealthResource(uninstallPlan.isPresent()
+                        ? Collections.singletonList(DefaultPlanManager.createProceeding(uninstallPlan.get()))
+                        : Collections.emptyList()),
                 new JobsResource(jobInfoProvider),
                 new JobsArtifactResource(jobInfoProvider),
                 new JobsConfigResource(jobInfoProvider),

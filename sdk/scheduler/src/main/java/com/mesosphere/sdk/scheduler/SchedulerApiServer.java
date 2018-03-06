@@ -34,6 +34,8 @@ public class SchedulerApiServer {
     private final Server server;
     private final Duration startTimeout;
 
+    private Thread serverThread;
+
     public static SchedulerApiServer start(
             SchedulerConfig schedulerConfig, Collection<Object> resources, Runnable startedCallback) {
         SchedulerApiServer apiServer = new SchedulerApiServer(schedulerConfig, resources);
@@ -117,7 +119,8 @@ public class SchedulerApiServer {
             }
         };
 
-        new Thread(runServerCallback).start();
+        serverThread = new Thread(runServerCallback);
+        serverThread.start();
     }
 
     /**
@@ -134,7 +137,23 @@ public class SchedulerApiServer {
     }
 
     /**
-     * Stops the server. Mainly used for testing.
+     * Waits for the server to stop. If the server is not stopped, this waits forever.
+     *
+     * <p>Useful for keeping the scheduler alive while only running the HTTP service.
+     */
+    public void join() {
+        while (true) {
+            try {
+                serverThread.join();
+                break;
+            } catch (InterruptedException e) {
+                LOGGER.error("Interrupted while waiting for HTTP server to join. Retrying wait.", e);
+            }
+        }
+    }
+
+    /**
+     * Stops the server. Used for tests.
      */
     @VisibleForTesting
     void stop() throws Exception {

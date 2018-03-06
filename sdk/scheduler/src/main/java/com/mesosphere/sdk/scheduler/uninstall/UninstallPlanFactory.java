@@ -29,16 +29,12 @@ import com.mesosphere.sdk.scheduler.plan.strategy.ParallelStrategy;
 import com.mesosphere.sdk.scheduler.plan.strategy.SerialStrategy;
 import com.mesosphere.sdk.scheduler.recovery.FailureUtils;
 import com.mesosphere.sdk.specification.ServiceSpec;
-import com.mesosphere.sdk.state.ConfigStore;
-import com.mesosphere.sdk.state.FrameworkStore;
 import com.mesosphere.sdk.state.StateStore;
-import com.mesosphere.sdk.storage.PersisterException;
-import com.mesosphere.sdk.storage.PersisterUtils;
 
 /**
  * Handles creation of the uninstall plan, returning information about the plan contents back to the caller.
  */
-public class UninstallPlanBuilder {
+public class UninstallPlanFactory {
 
     private static final String TASK_KILL_PHASE = "kill-tasks";
     private static final String RESOURCE_PHASE = "unreserve-resources";
@@ -47,28 +43,15 @@ public class UninstallPlanBuilder {
 
     private final Logger logger;
     private final Plan plan;
+    private final Collection<ResourceCleanupStep> resourceCleanupSteps;
+    private final DeregisterStep deregisterStep;
 
-    UninstallPlanBuilder(
+    UninstallPlanFactory(
             ServiceSpec serviceSpec,
-            FrameworkStore frameworkStore,
             StateStore stateStore,
-            ConfigStore<ServiceSpec> configStore,
             SchedulerConfig schedulerConfig,
             Optional<SecretsClient> customSecretsClientForTests) {
         this.logger = LoggingUtils.getLogger(getClass(), serviceSpec.getName());
-
-        // If there is no framework ID, wipe ZK and produce an empty COMPLETE plan
-        // TODO(nickbp): UNINSTALL Move this upstream into the framework level
-        if (!frameworkStore.fetchFrameworkId().isPresent()) {
-            logger.info("Framework ID is unset. Clearing persisted data and using an empty completed plan.");
-            try {
-                PersisterUtils.clearAllData(stateStore.getPersister());
-            } catch (PersisterException e) {
-                throw new IllegalStateException("Unable to clear data following unset Framework ID", e);
-            }
-            plan = new DefaultPlan(Constants.DEPLOY_PLAN_NAME, Collections.emptyList());
-            return;
-        }
 
         List<Phase> phases = new ArrayList<>();
 
@@ -100,15 +83,19 @@ public class UninstallPlanBuilder {
                         && taskIdsInErrorState.contains(taskInfo.getTaskId())))
                 .collect(Collectors.toList());
 
-        List<Step> resourceSteps =
+        this.resourceCleanupSteps =
                 ResourceUtils.getResourceIds(ResourceUtils.getAllResources(tasksNotFailedAndErrored)).stream()
                         .map(resourceId -> new ResourceCleanupStep(resourceId, Status.PENDING))
                         .collect(Collectors.toList());
         logger.info("Configuring resource cleanup of {}/{} tasks: {}/{} expected resources have been unreserved",
                 tasksNotFailedAndErrored.size(), allTasks.size(),
-                resourceSteps.stream().filter(step -> step.isComplete()).count(),
-                resourceSteps.size());
-        phases.add(new DefaultPhase(RESOURCE_PHASE, resourceSteps, new ParallelStrategy<>(), Collections.emptyList()));
+                resourceCleanupSteps.stream().filter(step -> step.isComplete()).count(),
+                resourceCleanupSteps.size());
+        phases.add(new DefaultPhase(
+                RESOURCE_PHASE,
+                resourceCleanupSteps.stream().collect(Collectors.toList()), // hack to get around collection typing
+                new ParallelStrategy<>(),
+                Collections.emptyList()));
 
         // If applicable, we also clean up any TLS secrets that we'd created before.
         // Note: This won't catch certificates where the user installed the service with TLS enabled, then disabled TLS
@@ -137,12 +124,12 @@ public class UninstallPlanBuilder {
             }
         }
 
-        // Finally, we unregister the framework from Mesos.
-        // We don't have access to the SchedulerDriver yet. That will be set via setSchedulerDriver() below.
-        // TODO(nickbp): UNINSTALL Move this upstream into the framework level
+        // Finally, we wipe remaining ZK data and unregister the framework from Mesos.
+        // This is done upstream in FrameworkRunner, then the step is notified when it completes.
+        this.deregisterStep = new DeregisterStep();
         phases.add(new DefaultPhase(
                 DEREGISTER_PHASE,
-                Collections.singletonList(new DeregisterStep(frameworkStore)),
+                Collections.singletonList(deregisterStep),
                 new SerialStrategy<>(),
                 Collections.emptyList()));
 
@@ -152,7 +139,21 @@ public class UninstallPlanBuilder {
     /**
      * Returns the plan to be used for uninstalling the service.
      */
-    Plan build() {
+    Plan getPlan() {
         return plan;
+    }
+
+    /**
+     * Returns the resource cleanup steps.
+     */
+    Collection<ResourceCleanupStep> getResourceCleanupSteps() {
+        return resourceCleanupSteps;
+    }
+
+    /**
+     * Returns the deregister step.
+     */
+    DeregisterStep getDeregisterStep() {
+        return deregisterStep;
     }
 }

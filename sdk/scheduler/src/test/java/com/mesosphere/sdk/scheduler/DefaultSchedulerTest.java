@@ -798,7 +798,7 @@ public class DefaultSchedulerTest {
                 serviceSpec, SchedulerConfigTestUtils.getTestSchedulerConfig(), persister)
                 .build()
                 .start();
-        scheduler.register(false);
+        scheduler.registered(false);
         return (DefaultScheduler) scheduler;
     }
 

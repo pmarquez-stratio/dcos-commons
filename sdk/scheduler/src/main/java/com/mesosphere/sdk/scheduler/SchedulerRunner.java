@@ -2,23 +2,23 @@ package com.mesosphere.sdk.scheduler;
 
 import com.mesosphere.sdk.config.validate.PodSpecsCannotUseUnsupportedFeatures;
 import com.mesosphere.sdk.curator.CuratorLocker;
-import com.mesosphere.sdk.scheduler.uninstall.UninstallScheduler;
 import com.mesosphere.sdk.specification.DefaultServiceSpec;
 import com.mesosphere.sdk.specification.ServiceSpec;
 import com.mesosphere.sdk.specification.yaml.RawServiceSpec;
+import com.mesosphere.sdk.state.SchemaVersionStore;
+import com.mesosphere.sdk.storage.Persister;
 import com.mesosphere.sdk.storage.PersisterException;
-import com.mesosphere.sdk.storage.PersisterUtils;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.File;
 
 /**
  * Sets up and executes the {@link ServiceScheduler} instance.
  */
 public class SchedulerRunner implements Runnable {
-    private static final Logger LOGGER = LoggerFactory.getLogger(SchedulerRunner.class);
+
+    /**
+     * Schema version used by single-service schedulers, which is what {@link SchedulerRunner} runs.
+     */
+    private static final int SUPPORTED_SCHEMA_VERSION_SINGLE_SERVICE = 1;
 
     private final SchedulerBuilder schedulerBuilder;
 
@@ -73,39 +73,24 @@ public class SchedulerRunner implements Runnable {
      */
     @Override
     public void run() {
-        CuratorLocker.lock(
-                schedulerBuilder.getServiceSpec().getName(),
-                schedulerBuilder.getServiceSpec().getZookeeperConnection());
+        SchedulerConfig schedulerConfig = schedulerBuilder.getSchedulerConfig();
+        ServiceSpec serviceSpec = schedulerBuilder.getServiceSpec();
+        Persister persister = schedulerBuilder.getPersister();
 
-        Metrics.configureStatsd(schedulerBuilder.getSchedulerConfig());
+        // Get a curator lock, then check the schema version:
+        CuratorLocker.lock(serviceSpec.getName(), serviceSpec.getZookeeperConnection());
+        // Check and/or initialize schema version before doing any other storage access:
+        new SchemaVersionStore(persister).check(SUPPORTED_SCHEMA_VERSION_SINGLE_SERVICE);
+
+        Metrics.configureStatsd(schedulerConfig);
 
         FrameworkRunner frameworkRunner = new FrameworkRunner(
-                schedulerBuilder.getSchedulerConfig(),
-                FrameworkConfig.fromServiceSpec(schedulerBuilder.getServiceSpec()),
-                PodSpecsCannotUseUnsupportedFeatures.serviceRequestsGpuResources(schedulerBuilder.getServiceSpec()));
+                schedulerConfig,
+                FrameworkConfig.fromServiceSpec(serviceSpec),
+                PodSpecsCannotUseUnsupportedFeatures.serviceRequestsGpuResources(serviceSpec));
 
         ServiceScheduler scheduler = schedulerBuilder.build();
         scheduler.start();
-        if (scheduler instanceof UninstallScheduler && ((UninstallScheduler) scheduler).shouldRegisterFramework()) {
-            LOGGER.info("Not registering framework because there are no resources left to unreserve.");
-
-            try {
-                PersisterUtils.clearAllData(scheduler.getPersister());
-            } catch (PersisterException e) {
-                throw new IllegalStateException("Unable to clear all data", e);
-            }
-
-            SchedulerApiServer.start(
-                    schedulerBuilder.getSchedulerConfig(),
-                    scheduler.getHTTPEndpoints(),
-                    new Runnable() {
-                @Override
-                public void run() {
-                    LOGGER.info("Started trivially healthy API server.");
-                }
-            });
-        } else {
-            frameworkRunner.registerAndRunFramework(scheduler.getPersister(), scheduler);
-        }
+        frameworkRunner.registerAndRunFramework(persister, scheduler);
     }
 }

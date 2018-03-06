@@ -1,6 +1,5 @@
 package com.mesosphere.sdk.scheduler.uninstall;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.mesosphere.sdk.config.SerializationUtils;
 import com.mesosphere.sdk.dcos.clients.SecretsClient;
 import com.mesosphere.sdk.http.endpoints.DeprecatedPlanResource;
@@ -14,7 +13,6 @@ import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.scheduler.plan.*;
 import com.mesosphere.sdk.specification.ServiceSpec;
 import com.mesosphere.sdk.state.ConfigStore;
-import com.mesosphere.sdk.state.FrameworkStore;
 import com.mesosphere.sdk.state.StateStore;
 import com.mesosphere.sdk.state.StateStoreUtils;
 import org.apache.mesos.Protos;
@@ -28,18 +26,13 @@ import java.util.stream.Collectors;
  * This scheduler uninstalls a service and releases all of its resources.
  */
 public class UninstallScheduler extends ServiceScheduler {
-    /**
-     * Empty complete deploy plan to be used if the scheduler was launched in a finished state.
-     */
-    @VisibleForTesting
-    static final Plan EMPTY_DEPLOY_PLAN = new DefaultPlan(Constants.DEPLOY_PLAN_NAME, Collections.emptyList());
-
     private final Logger logger;
     private final ConfigStore<ServiceSpec> configStore;
     private final UninstallRecorder recorder;
-
-    private PlanManager uninstallPlanManager;
-    private Collection<Object> resources = Collections.emptyList();
+    // This step is used in the deploy plan to represent the unregister operation that's handled in FrameworkRunner.
+    // We want to ensure that the deploy plan is only marked complete after deregistration has been completed.
+    private final DeregisterStep deregisterStubStep;
+    private final PlanManager uninstallPlanManager;
 
     /**
      * Creates a new {@link UninstallScheduler} using the provided components. The {@link UninstallScheduler} builds an
@@ -48,75 +41,52 @@ public class UninstallScheduler extends ServiceScheduler {
      */
     public UninstallScheduler(
             ServiceSpec serviceSpec,
-            FrameworkStore frameworkStore,
             StateStore stateStore,
             ConfigStore<ServiceSpec> configStore,
             SchedulerConfig schedulerConfig,
             Optional<PlanCustomizer> planCustomizer) {
-        this(serviceSpec, frameworkStore, stateStore, configStore, schedulerConfig, planCustomizer, Optional.empty());
+        this(serviceSpec, stateStore, configStore, schedulerConfig, planCustomizer, Optional.empty());
     }
 
     protected UninstallScheduler(
             ServiceSpec serviceSpec,
-            FrameworkStore frameworkStore,
             StateStore stateStore,
             ConfigStore<ServiceSpec> configStore,
             SchedulerConfig schedulerConfig,
             Optional<PlanCustomizer> planCustomizer,
             Optional<SecretsClient> customSecretsClientForTests) {
-        super(serviceSpec.getName(), frameworkStore, stateStore, schedulerConfig, planCustomizer);
+        super(serviceSpec.getName(), stateStore, planCustomizer);
         this.logger = LoggingUtils.getLogger(getClass(), serviceSpec.getName());
         this.configStore = configStore;
 
-        final Plan deployPlan;
-        if (allButStateStoreUninstalled(frameworkStore, stateStore, schedulerConfig)) {
-            /**
-             * If the state store is empty this scheduler has been deregistered. Therefore it should report itself
-             * healthy and provide an empty COMPLETE deploy plan so it may complete its uninstall.
-             */
-            deployPlan = EMPTY_DEPLOY_PLAN;
-        } else {
-            deployPlan = new UninstallPlanBuilder(
-                    serviceSpec,
-                    frameworkStore,
-                    stateStore,
-                    configStore,
-                    schedulerConfig,
-                    customSecretsClientForTests)
-                    .build();
+        if (!StateStoreUtils.isUninstalling(stateStore)) {
+            logger.info("Service has been told to uninstall. Marking this in the persistent state store. " +
+                    "Uninstall cannot be canceled once triggered.");
+            StateStoreUtils.setUninstalling(stateStore);
         }
-        this.recorder = new UninstallRecorder(serviceSpec.getName(), stateStore, deployPlan.getChildren().stream()
-                .flatMap(phase -> phase.getChildren().stream())
-                .filter(step -> step instanceof ResourceCleanupStep)
-                .map(step -> (ResourceCleanupStep) step)
-                .collect(Collectors.toList()));
 
-        this.uninstallPlanManager = DefaultPlanManager.createProceeding(deployPlan);
-        PlansResource plansResource = new PlansResource(Collections.singletonList(uninstallPlanManager));
-        // TODO(nickbp): UNINSTALL Need an endpoint (plans,health?) so that cosmos knows when to remove the marathon app
-        this.resources = Arrays.asList(
-                plansResource,
-                new DeprecatedPlanResource(plansResource),
-                new HealthResource(Collections.singletonList(uninstallPlanManager)));
+        // Construct a plan for uninstalling any remaining resources
+        UninstallPlanFactory planFactory =
+                new UninstallPlanFactory(serviceSpec, stateStore, schedulerConfig, customSecretsClientForTests);
+        this.recorder = new UninstallRecorder(serviceSpec.getName(), stateStore, planFactory.getResourceCleanupSteps());
+        this.deregisterStubStep = planFactory.getDeregisterStep();
+
+        this.uninstallPlanManager = DefaultPlanManager.createProceeding(planFactory.getPlan());
         try {
-            logger.info("Uninstall plan set to: {}", SerializationUtils.toJsonString(PlanInfo.forPlan(deployPlan)));
+            logger.info("Uninstall plan set to: {}",
+                    SerializationUtils.toJsonString(PlanInfo.forPlan(planFactory.getPlan())));
         } catch (IOException e) {
             logger.error("Failed to deserialize uninstall plan.");
         }
     }
 
-    /**
-     * Returns whether the process should register with Mesos.
-     *
-     * This handles the case where there's nothing left to do with Mesos -- the framework has already unregistered.
-     */
-    public boolean shouldRegisterFramework() {
-        return !allButStateStoreUninstalled(frameworkStore, stateStore, schedulerConfig);
-    }
-
     @Override
     public Collection<Object> getHTTPEndpoints() {
-        return resources;
+        PlansResource plansResource = new PlansResource(Collections.singletonList(uninstallPlanManager));
+        return Arrays.asList(
+                plansResource,
+                new DeprecatedPlanResource(plansResource),
+                new HealthResource(Collections.singletonList(uninstallPlanManager)));
     }
 
     @Override
@@ -146,6 +116,13 @@ public class UninstallScheduler extends ServiceScheduler {
     }
 
     @Override
+    public void unregistered() {
+        // Mark the the last step of the uninstall plan as complete.
+        // Cosmos will then see that the plan is complete and remove us from Marathon.
+        deregisterStubStep.setComplete();
+    }
+
+    @Override
     protected OfferResponse processOffers(Collection<Protos.Offer> offers, Collection<Step> steps) {
         // Get candidate steps to be scheduled
         if (!steps.isEmpty()) {
@@ -154,8 +131,11 @@ public class UninstallScheduler extends ServiceScheduler {
             steps.forEach(Step::start);
         }
 
-        if (uninstallPlanManager.getPlan().isComplete()) {
-            // Uninstall of the service has completed, let upstream know.
+        if (deregisterStubStep.isRunning()) {
+            // The service resources have been deleted and all that's left is the final deregister operation. After we
+            // return finished(), upstream will finish the uninstall by doing one of the following:
+            // - Mono-service: Upstream will stop/remove the framework, then unregistered() will be called.
+            // - Multi-service: Upstream will remove us from the list of services without calling unregistered().
             return OfferResponse.finished();
         } else {
             // No recommendations. Upstream should invoke the cleaner against any unexpected resources in unclaimed
@@ -193,18 +173,7 @@ public class UninstallScheduler extends ServiceScheduler {
         stateStore.storeStatus(StateStoreUtils.getTaskName(stateStore, status), status);
     }
 
-    private static boolean allButStateStoreUninstalled(
-            FrameworkStore frameworkStore, StateStore stateStore, SchedulerConfig schedulerConfig) {
-        // Because we cannot delete the root ZK node (ACLs on the master, see StateStore.clearAllData() for more
-        // details) we have to clear everything under it. This results in a race condition, where DefaultService can
-        // have register() called after the StateStore already has the uninstall bit wiped.
-        //
-        // As can be seen in DefaultService.initService(), DefaultService.register() will only be called in uninstall
-        // mode if schedulerConfig.isUninstallEnabled() == true. Therefore we can use it as an OR along with
-        // StateStoreUtils.isUninstalling().
-
-        // Framework ID is gone, all resources are unreserved/destroyed, but the empty task entries remain to be removed
-        return !frameworkStore.fetchFrameworkId().isPresent() &&
-                ResourceUtils.getAllResources(stateStore.fetchTasks()).isEmpty();
+    public DeregisterStep getDeregisterStep() {
+        return deregisterStubStep;
     }
 }
