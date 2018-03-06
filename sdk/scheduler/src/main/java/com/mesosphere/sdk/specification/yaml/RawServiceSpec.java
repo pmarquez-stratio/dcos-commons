@@ -37,11 +37,19 @@ public class RawServiceSpec {
             YAML_MAPPER.enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
         }
 
-        private final File pathToYamlTemplate;
+        private final String name;
+        private final String yamlTemplate;
         private Map<String, String> env;
 
-        private Builder(File pathToYamlTemplate) {
-            this.pathToYamlTemplate = pathToYamlTemplate;
+        private Builder(File pathToYamlTemplate) throws IOException {
+            this(
+                    pathToYamlTemplate.getAbsolutePath(),
+                    FileUtils.readFileToString(pathToYamlTemplate, StandardCharsets.UTF_8));
+        }
+
+        private Builder(String name, String yamlTemplate) {
+            this.name = name;
+            this.yamlTemplate = yamlTemplate;
             this.env = System.getenv();
         }
 
@@ -63,12 +71,13 @@ public class RawServiceSpec {
             // reasonable default principal.
             List<TemplateUtils.MissingValue> missingValues = new ArrayList<>();
             String yamlWithEnv = TemplateUtils.renderMustache(
-                    pathToYamlTemplate.getName(),
-                    FileUtils.readFileToString(pathToYamlTemplate, StandardCharsets.UTF_8),
+                    name,
+                    yamlTemplate,
                     env,
                     missingValues);
-            LOGGER.info("Rendered ServiceSpec from {}:\nMissing template values: {}\n{}",
-                    pathToYamlTemplate.getAbsolutePath(), missingValues, yamlWithEnv);
+            LOGGER.info(
+                    "Rendered ServiceSpec from {}:\nMissing template values: {}\n{}",
+                    name, missingValues, yamlWithEnv);
             return YAML_MAPPER.readValue(yamlWithEnv.getBytes(StandardCharsets.UTF_8), RawServiceSpec.class);
         }
     }
@@ -81,6 +90,10 @@ public class RawServiceSpec {
 
     public static Builder newBuilder(File pathToYamlTemplate) throws IOException {
         return new Builder(pathToYamlTemplate);
+    }
+
+    public static Builder newBuilder(String name, String yamlTemplate) {
+        return new Builder(name, yamlTemplate);
     }
 
     @JsonCreator
