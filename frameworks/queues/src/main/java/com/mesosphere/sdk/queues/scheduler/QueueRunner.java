@@ -21,16 +21,8 @@ import com.mesosphere.sdk.storage.PersisterException;
 public class QueueRunner implements Runnable {
 
     /**
-     * Schema version used by single-service schedulers, which is what {@link QueueRunner} runs.
+     * Builder for {@link QueueRunner}.
      */
-    private static final int SUPPORTED_SCHEMA_VERSION_MULTI_SERVICE = 2;
-
-    private final SchedulerConfig schedulerConfig;
-    private final FrameworkConfig frameworkConfig;
-    private final Persister persister;
-    private final MesosEventClient client;
-    private final boolean usingGpus;
-
     public static class Builder {
         private final SchedulerConfig schedulerConfig;
         private final FrameworkConfig frameworkConfig;
@@ -92,6 +84,17 @@ public class QueueRunner implements Runnable {
             return new QueueRunner(schedulerConfig, frameworkConfig, persister, client, usingGpus);
         }
     }
+
+    /**
+     * Schema version used by single-service schedulers, which is what {@link QueueRunner} runs.
+     */
+    private static final int SUPPORTED_SCHEMA_VERSION_MULTI_SERVICE = 2;
+
+    private final SchedulerConfig schedulerConfig;
+    private final FrameworkConfig frameworkConfig;
+    private final Persister persister;
+    private final MesosEventClient client;
+    private final boolean usingGpus;
 
     /**
      * Returns a new {@link Builder} instance which may be customize before building the {@link QueueRunner}.
