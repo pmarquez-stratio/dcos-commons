@@ -24,7 +24,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.io.File;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
 
@@ -42,33 +41,6 @@ public class SchedulerBuilderTest {
         MockitoAnnotations.initMocks(this);
         when(mockCapabilities.supportsDomains()).thenReturn(true);
         Capabilities.overrideCapabilities(mockCapabilities);
-    }
-
-    @Test
-    public void checkSchemaVersion() throws Exception {
-        ClassLoader classLoader = getClass().getClassLoader();
-        File file = new File(classLoader.getResource("valid-minimal.yml").getFile());
-        DefaultServiceSpec serviceSpec = DefaultServiceSpec.newGenerator(file, SCHEDULER_CONFIG).build();
-
-        Persister persister = new MemPersister();
-
-        // Constructing the builder must not touch the persister:
-        SchedulerBuilder builder = new SchedulerBuilder(serviceSpec, SCHEDULER_CONFIG, persister);
-        Assert.assertEquals(0, persister.getChildren("").size());
-
-        // Once builder.build() is invoked, the schema version should be checked/updated:
-        builder.build();
-        Assert.assertEquals("1", new String(persister.get("SchemaVersion"), StandardCharsets.UTF_8));
-
-        // Set the schema version to a bad value, and check that version validation now fails:
-        persister.set("SchemaVersion", "123".getBytes(StandardCharsets.UTF_8));
-        try {
-            builder.build();
-            Assert.fail("Expected exception due to bad schema version");
-        } catch (IllegalStateException e) {
-            Assert.assertEquals(
-                    "Storage schema version 123 is not supported by this software (expected: 1)", e.getMessage());
-        }
     }
 
     @Test

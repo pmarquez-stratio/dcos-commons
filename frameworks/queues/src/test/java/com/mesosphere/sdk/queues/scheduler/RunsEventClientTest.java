@@ -30,7 +30,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-public class JobsEventClientTest {
+public class RunsEventClientTest {
 
     private static final Answer<OfferResponse> CONSUME_FIRST_OFFER = new Answer<OfferResponse>() {
         @Override
@@ -80,9 +80,9 @@ public class JobsEventClientTest {
     @Mock private ServiceScheduler mockClient8;
     @Mock private ServiceScheduler mockClient9;
     @Mock private SchedulerConfig mockSchedulerConfig;
-    @Mock private JobsEventClient.UninstallCallback mockUninstallCallback;
+    @Mock private RunsEventClient.UninstallCallback mockUninstallCallback;
 
-    private JobsEventClient client;
+    private RunsEventClient client;
 
     @Before
     public void beforeEach() {
@@ -96,15 +96,15 @@ public class JobsEventClientTest {
         when(mockClient7.getName()).thenReturn("7");
         when(mockClient8.getName()).thenReturn("8");
         when(mockClient9.getName()).thenReturn("9");
-        client = new JobsEventClient(mockSchedulerConfig, mockUninstallCallback);
+        client = new RunsEventClient(mockSchedulerConfig, mockUninstallCallback);
     }
 
     @Test
     public void putClients() {
-        client.putJob(mockClient1);
-        client.putJob(mockClient2);
+        client.putRun(mockClient1);
+        client.putRun(mockClient2);
         try {
-            client.putJob(mockClient2);
+            client.putRun(mockClient2);
             Assert.fail("Expected exception: duplicate key");
         } catch (IllegalArgumentException e) {
             // expected
@@ -151,15 +151,15 @@ public class JobsEventClientTest {
         when(mockClient8.offers(any())).then(CONSUME_LAST_OFFER);
         when(mockClient9.offers(any())).then(NO_CHANGES);
         client
-                .putJob(mockClient1)
-                .putJob(mockClient2)
-                .putJob(mockClient3)
-                .putJob(mockClient4)
-                .putJob(mockClient5)
-                .putJob(mockClient6)
-                .putJob(mockClient7)
-                .putJob(mockClient8)
-                .putJob(mockClient9);
+                .putRun(mockClient1)
+                .putRun(mockClient2)
+                .putRun(mockClient3)
+                .putRun(mockClient4)
+                .putRun(mockClient5)
+                .putRun(mockClient6)
+                .putRun(mockClient7)
+                .putRun(mockClient8)
+                .putRun(mockClient9);
 
         // Empty offers: All clients should have been pinged regardless
         OfferResponse response = client.offers(Collections.emptyList());
@@ -217,9 +217,9 @@ public class JobsEventClientTest {
         when(mockClient2.offers(any())).then(OFFER_NOT_READY);
         when(mockClient3.offers(any())).then(NO_CHANGES);
         client
-                .putJob(mockClient1)
-                .putJob(mockClient2)
-                .putJob(mockClient3);
+                .putRun(mockClient1)
+                .putRun(mockClient2)
+                .putRun(mockClient3);
 
         // Empty offers: All clients should have been pinged regardless
         OfferResponse response = client.offers(Collections.emptyList());
@@ -244,9 +244,9 @@ public class JobsEventClientTest {
         // Client 2: unknown task, Clients 1 and 3: no interaction
         when(mockClient2.status(any())).thenReturn(StatusResponse.unknownTask());
         client
-                .putJob(mockClient1)
-                .putJob(mockClient2)
-                .putJob(mockClient3);
+                .putRun(mockClient1)
+                .putRun(mockClient2)
+                .putRun(mockClient3);
 
         Protos.TaskStatus status = getStatus("2");
         Assert.assertEquals(StatusResponse.Result.UNKNOWN_TASK, client.status(status).result);
@@ -262,10 +262,10 @@ public class JobsEventClientTest {
         when(mockClient3.status(any())).thenReturn(StatusResponse.processed());
         when(mockClient4.status(any())).thenReturn(StatusResponse.unknownTask());
         client
-                .putJob(mockClient1)
-                .putJob(mockClient2)
-                .putJob(mockClient3)
-                .putJob(mockClient4);
+                .putRun(mockClient1)
+                .putRun(mockClient2)
+                .putRun(mockClient3)
+                .putRun(mockClient4);
 
         Protos.TaskStatus status = getStatus("3");
         Assert.assertEquals(StatusResponse.Result.PROCESSED, client.status(status).result);

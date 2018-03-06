@@ -23,6 +23,7 @@ public class CuratorLocker {
     private static final int LOCK_ATTEMPTS = 3;
     static final String LOCK_PATH_NAME = "lock";
 
+    private static boolean enabled = true;
     private static final Object INSTANCE_LOCK = new Object();
     private static CuratorLocker instance = null;
     private static final Thread SHUTDOWN_HOOK = new Thread(() -> {
@@ -46,6 +47,9 @@ public class CuratorLocker {
      */
     public static void lock(String serviceName, String zookeeperHostPort) {
         synchronized (INSTANCE_LOCK) {
+            if (!enabled) {
+                return;
+            }
             if (instance != null) {
                 throw new IllegalStateException("Already locked");
             }
@@ -54,6 +58,14 @@ public class CuratorLocker {
 
             Runtime.getRuntime().addShutdownHook(SHUTDOWN_HOOK);
         }
+    }
+
+    /**
+     * Allows disabling locking for unit tests of things that internally try to acquire a curator lock.
+     */
+    @VisibleForTesting
+    public static void setEnabledForTests(boolean enabled) {
+        CuratorLocker.enabled = enabled;
     }
 
     @VisibleForTesting

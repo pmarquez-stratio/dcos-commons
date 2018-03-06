@@ -1,6 +1,6 @@
 package com.mesosphere.sdk.queues.scheduler;
 
-import com.mesosphere.sdk.queues.http.endpoints.JobsArtifactResource;
+import com.mesosphere.sdk.queues.http.endpoints.RunsArtifactResource;
 import com.mesosphere.sdk.scheduler.DefaultScheduler;
 import com.mesosphere.sdk.scheduler.EnvStore;
 import com.mesosphere.sdk.scheduler.FrameworkConfig;
@@ -29,7 +29,7 @@ public class Main {
         EnvStore envStore = EnvStore.fromEnv();
         SchedulerConfig schedulerConfig = SchedulerConfig.fromEnvStore(envStore);
         FrameworkConfig frameworkConfig = FrameworkConfig.fromEnvStore(envStore);
-        JobsEventClient client = new JobsEventClient(schedulerConfig, new JobsEventClient.UninstallCallback() {
+        RunsEventClient client = new RunsEventClient(schedulerConfig, new RunsEventClient.UninstallCallback() {
             @Override
             public void uninstalled(String name) {
                 LOGGER.info("Job has completed uninstall: {}", name);
@@ -39,12 +39,12 @@ public class Main {
         // First initialize the QueueRunner to get the (cached) persister that will be reused by individual jobs
         // (within their own namespaces)
         // Note: In practice, jobs would be added over HTTP after run() begins
-        QueueRunner queueRunner = QueueRunner.build(
-                schedulerConfig,
-                frameworkConfig,
-                client,
-                // Need to tell Mesos up-front whether we want GPU resources:
-                envStore.getOptionalBoolean("FRAMEWORK_GPUS", false));
+        QueueRunner.Builder runnerBuilder = QueueRunner.newBuilder(schedulerConfig, frameworkConfig, client);
+        // Need to tell Mesos up-front whether we want GPU resources:
+        if (envStore.getOptionalBoolean("FRAMEWORK_GPUS", false)) {
+            runnerBuilder.enableGpus();
+        }
+        QueueRunner queueRunner = runnerBuilder.build();
 
         // Read jobs from provided files, and assume any config templates are in the same directory as the files:
         for (int i = 0; i < args.length; ++i) {
@@ -56,13 +56,13 @@ public class Main {
                     .setMultiServiceFrameworkConfig(frameworkConfig)
                     .build();
             LOGGER.info("Adding job: {}", serviceSpec.getName());
-            client.putJob(DefaultScheduler.newBuilder(serviceSpec, schedulerConfig, queueRunner.getPersister())
+            client.putRun(DefaultScheduler.newBuilder(serviceSpec, schedulerConfig, queueRunner.getPersister())
                     .setPlansFrom(rawServiceSpec)
                     // Jobs-related customizations:
                     // - In ZK, store data under "dcos-service-<fwkName>/Services/<jobName>"
                     .setStorageNamespace(serviceSpec.getName())
                     // - Config templates are served by JobsArtifactResource rather than default ArtifactResource
-                    .setTemplateUrlFactory(JobsArtifactResource.getUrlFactory(
+                    .setTemplateUrlFactory(RunsArtifactResource.getUrlFactory(
                             frameworkConfig.getFrameworkName(), serviceSpec.getName()))
                     // If the service was previously marked for uninstall, it will be built as an UninstallScheduler
                     .build());

@@ -217,6 +217,7 @@ class OfferProcessor {
 
     private void evaluateOffers(List<Protos.Offer> offers) {
         if (isDeregistered.get()) {
+            // Just in case there are unflushed offers in the queue when we're deregistered
             LOGGER.info("Dropping {} queued offers: Framework is deregistered", offers.size());
             return;
         }

@@ -93,13 +93,6 @@ public class ResponseUtils {
     }
 
     /**
-     * Returns a "404 Job [jobName] not found" response.
-     */
-    public static Response jobNotFoundResponse(String jobName) {
-        return ResponseUtils.notFoundResponse("Job " + jobName);
-    }
-
-    /**
      * Returns a "404 [itemType] not found" response.
      */
     public static Response notFoundResponse(String itemType) {

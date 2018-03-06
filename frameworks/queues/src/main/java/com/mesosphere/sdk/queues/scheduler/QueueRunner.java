@@ -31,38 +31,87 @@ public class QueueRunner implements Runnable {
     private final MesosEventClient client;
     private final boolean usingGpus;
 
+    public static class Builder {
+        private final SchedulerConfig schedulerConfig;
+        private final FrameworkConfig frameworkConfig;
+        private final MesosEventClient client;
+
+        private Persister persister;
+        private boolean usingGpus = false;
+
+        private Builder(SchedulerConfig schedulerConfig, FrameworkConfig frameworkConfig, MesosEventClient client) {
+            this.schedulerConfig = schedulerConfig;
+            this.frameworkConfig = frameworkConfig;
+            this.client = client;
+        }
+
+        /**
+         * Tells Mesos that we want to be offered GPU resources.
+         *
+         * @return {@code this}
+         */
+        public Builder enableGpus() {
+            this.usingGpus = true;
+            return this;
+        }
+
+        /**
+         * Overrides the persister to be used, intended for testing.
+         *
+         * @return {@code this}
+         */
+        public Builder setCustomPersister(Persister persister) {
+            this.persister = persister;
+            return this;
+        }
+
+        /**
+         * Returns a new {@link QueueRunner} instance which may be launched with {@code run()}.
+         */
+        public QueueRunner build() {
+            if (persister == null) {
+                // Default: Curator persister
+                try {
+                    persister = CuratorPersister.newBuilder(
+                            frameworkConfig.getFrameworkName(), frameworkConfig.getZookeeperHostPort()).build();
+                    if (schedulerConfig.isStateCacheEnabled()) {
+                        persister = new PersisterCache(persister);
+                    }
+                } catch (PersisterException e) {
+                    throw new IllegalStateException(String.format(
+                            "Failed to initialize default persister at %s for framework %s",
+                            frameworkConfig.getZookeeperHostPort(), frameworkConfig.getFrameworkName()));
+                }
+            }
+
+            // Lock curator before returning access to persister.
+            CuratorLocker.lock(frameworkConfig.getFrameworkName(), frameworkConfig.getZookeeperHostPort());
+            // Check and/or initialize schema version before doing any other storage access:
+            new SchemaVersionStore(persister).check(SUPPORTED_SCHEMA_VERSION_MULTI_SERVICE);
+
+            return new QueueRunner(schedulerConfig, frameworkConfig, persister, client, usingGpus);
+        }
+    }
+
+    /**
+     * Returns a new {@link Builder} instance which may be customize before building the {@link QueueRunner}.
+     *
+     * @param client the Mesos event client which receives offers/statuses from Mesos. Note that this may route
+     *               events to multiple wrapped clients
+     */
+    public static Builder newBuilder(
+            SchedulerConfig schedulerConfig,
+            FrameworkConfig frameworkConfig,
+            MesosEventClient client) {
+        return new Builder(schedulerConfig, frameworkConfig, client);
+    }
+
     /**
      * Returns a new {@link QueueRunner} instance which may be launched with {@code run()}.
      *
      * @param client the Mesos event client which receives offers/statuses from Mesos. Note that this may route events
      *               to multiple wrapped clients
      */
-    public static QueueRunner build(
-            SchedulerConfig schedulerConfig,
-            FrameworkConfig frameworkConfig,
-            MesosEventClient client,
-            boolean usingGpus) {
-        Persister persister;
-        try {
-            persister = CuratorPersister.newBuilder(
-                    frameworkConfig.getFrameworkName(), frameworkConfig.getZookeeperHostPort()).build();
-            if (schedulerConfig.isStateCacheEnabled()) {
-                persister = new PersisterCache(persister);
-            }
-        } catch (PersisterException e) {
-            throw new IllegalStateException(String.format(
-                    "Failed to initialize default persister at %s for framework %s",
-                    frameworkConfig.getZookeeperHostPort(), frameworkConfig.getFrameworkName()));
-        }
-
-        // Lock curator before returning access to persister.
-        CuratorLocker.lock(frameworkConfig.getFrameworkName(), frameworkConfig.getZookeeperHostPort());
-        // Check and/or initialize schema version before doing any other storage access:
-        new SchemaVersionStore(persister).check(SUPPORTED_SCHEMA_VERSION_MULTI_SERVICE);
-
-        return new QueueRunner(schedulerConfig, frameworkConfig, persister, client, usingGpus);
-    }
-
     private QueueRunner(
             SchedulerConfig schedulerConfig,
             FrameworkConfig frameworkConfig,

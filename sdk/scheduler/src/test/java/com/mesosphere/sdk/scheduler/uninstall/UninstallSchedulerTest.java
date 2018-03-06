@@ -200,9 +200,13 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
         List<Status> expected = Arrays.asList(Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.PENDING);
         Assert.assertEquals(plan.toString(), expected, getStepStatuses(plan));
 
-        // Turn the crank once to finish the deregistration Step
+        // Turn the crank once to prepare the deregistration Step
         uninstallScheduler.offers(Arrays.asList(getOffer()));
-        plan = planCoordinator.getPlanManagers().stream().findFirst().get().getPlan();
+        expected = Arrays.asList(Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.PREPARED);
+        Assert.assertEquals(plan.toString(), expected, getStepStatuses(plan));
+
+        // Deregistration completes only after we've told the scheduler that it's unregistered
+        uninstallScheduler.unregistered();
         expected = Arrays.asList(Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.COMPLETE);
         Assert.assertEquals(plan.toString(), expected, getStepStatuses(plan));
         Assert.assertTrue(plan.isComplete());
@@ -219,11 +223,18 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
                 SchedulerConfigTestUtils.getTestSchedulerConfig(),
                 Optional.empty(),
                 Optional.of(mockSecretsClient));
-        // Returns a simple placeholder plan with status COMPLETE
+        // Starts with a near-empty plan with only the deregistered call incomplete
         PlanCoordinator planCoordinator = uninstallScheduler.getPlanCoordinator();
         Plan plan = planCoordinator.getPlanManagers().stream().findFirst().get().getPlan();
+
+        List<Status> expected = Arrays.asList(Status.PENDING);
+        Assert.assertEquals(plan.toString(), expected, getStepStatuses(plan));
+        Assert.assertFalse(plan.toString(), plan.isComplete());
+
+        uninstallScheduler.unregistered();
+        expected = Arrays.asList(Status.COMPLETE);
+        Assert.assertEquals(plan.toString(), expected, getStepStatuses(plan));
         Assert.assertTrue(plan.toString(), plan.isComplete());
-        Assert.assertTrue(plan.getChildren().isEmpty());
     }
 
     @Test
@@ -267,8 +278,13 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
 
         verify(mockSecretsClient, times(1)).list(TestConstants.SERVICE_NAME);
 
-        // Then the final Deregister phase
+        // Then the final Deregister phase: goes PREPARED when offer arrives, then COMPLETE when told that we're unregistered
         uninstallScheduler.offers(Collections.singletonList(getOffer()));
+        expected = Arrays.asList(
+                Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.PREPARED);
+        Assert.assertEquals(plan.toString(), expected, getStepStatuses(plan));
+
+        uninstallScheduler.unregistered();
         expected = Arrays.asList(
                 Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.COMPLETE, Status.COMPLETE);
         Assert.assertEquals(plan.toString(), expected, getStepStatuses(plan));

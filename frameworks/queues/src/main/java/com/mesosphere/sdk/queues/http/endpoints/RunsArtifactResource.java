@@ -1,9 +1,8 @@
 package com.mesosphere.sdk.queues.http.endpoints;
 
 import com.mesosphere.sdk.http.EndpointUtils;
-import com.mesosphere.sdk.http.ResponseUtils;
 import com.mesosphere.sdk.http.queries.ArtifactQueries;
-import com.mesosphere.sdk.queues.http.types.JobInfoProvider;
+import com.mesosphere.sdk.queues.http.types.RunInfoProvider;
 import com.mesosphere.sdk.specification.ServiceSpec;
 import com.mesosphere.sdk.state.ConfigStore;
 import javax.ws.rs.GET;
@@ -17,22 +16,22 @@ import java.util.UUID;
 /**
  * A read-only API for accessing file artifacts (e.g. config templates) for retrieval by pods.
  */
-@Path("/v1/jobs")
-public class JobsArtifactResource {
+@Path("/v1/runs")
+public class RunsArtifactResource {
 
-    private static final String JOB_ARTIFACT_URI_FORMAT = "http://%s/v1/jobs/%s/artifacts/template/%s/%s/%s/%s";
+    private static final String RUN_ARTIFACT_URI_FORMAT = "http://%s/v1/runs/%s/artifacts/template/%s/%s/%s/%s";
 
-    private final JobInfoProvider jobInfoProvider;
+    private final RunInfoProvider runInfoProvider;
 
-    public JobsArtifactResource(JobInfoProvider jobInfoProvider) {
-        this.jobInfoProvider = jobInfoProvider;
+    public RunsArtifactResource(RunInfoProvider runInfoProvider) {
+        this.runInfoProvider = runInfoProvider;
     }
 
     /**
-     * Returns a factory for schedulers which use {@link JobsArtifactResource}.
+     * Returns a factory for schedulers which use {@link RunsArtifactResource}.
      *
      * @param frameworkName the name of the scheduler framework
-     * @param serviceName the name of a job/service being managed by the scheduler
+     * @param serviceName the name of a run/service being managed by the scheduler
      */
     public static ArtifactQueries.TemplateUrlFactory getUrlFactory(String frameworkName, String serviceName) {
         String hostname = EndpointUtils.toSchedulerApiVipHostname(frameworkName);
@@ -40,7 +39,7 @@ public class JobsArtifactResource {
             @Override
             public String get(UUID configId, String podType, String taskName, String configName) {
                 return String.format(
-                        JOB_ARTIFACT_URI_FORMAT, hostname, serviceName, configId, podType, taskName, configName);
+                        RUN_ARTIFACT_URI_FORMAT, hostname, serviceName, configId, podType, taskName, configName);
             }
         };
     }
@@ -48,17 +47,17 @@ public class JobsArtifactResource {
     /**
      * @see ArtifactQueries
      */
-    @Path("{jobName}/artifacts/template/{configurationId}/{podType}/{taskName}/{configurationName}")
+    @Path("{runName}/artifacts/template/{configurationId}/{podType}/{taskName}/{configurationName}")
     @GET
     public Response getTemplate(
-            @PathParam("jobName") String jobName,
+            @PathParam("runName") String runName,
             @PathParam("configurationId") String configurationId,
             @PathParam("podType") String podType,
             @PathParam("taskName") String taskName,
             @PathParam("configurationName") String configurationName) {
-        Optional<ConfigStore<ServiceSpec>> configStore = jobInfoProvider.getConfigStore(jobName);
+        Optional<ConfigStore<ServiceSpec>> configStore = runInfoProvider.getConfigStore(runName);
         if (!configStore.isPresent()) {
-            return ResponseUtils.jobNotFoundResponse(jobName);
+            return RunResponseUtils.runNotFoundResponse(runName);
         }
         return ArtifactQueries.getTemplate(configStore.get(), configurationId, podType, taskName, configurationName);
     }

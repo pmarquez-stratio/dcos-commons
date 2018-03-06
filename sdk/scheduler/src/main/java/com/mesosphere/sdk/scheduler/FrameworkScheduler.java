@@ -65,6 +65,8 @@ public class FrameworkScheduler implements Scheduler {
 
     /**
      * Notifies this instance that the API server has been initialized. All offers are declined until this is called.
+     *
+     * @return {@code this}
      */
     public FrameworkScheduler setReadyToAcceptOffers() {
         readyToAcceptOffers.set(true);
@@ -74,6 +76,8 @@ public class FrameworkScheduler implements Scheduler {
     /**
      * Disables multithreading for tests. For this to take effect, it must be invoked before the framework has
      * registered.
+     *
+     * @return {@code this}
      */
     @VisibleForTesting
     public FrameworkScheduler disableThreading() {
@@ -99,7 +103,7 @@ public class FrameworkScheduler implements Scheduler {
             SchedulerUtils.hardExit(SchedulerErrorCode.REGISTRATION_FAILURE);
         }
 
-        updateStaticData(driver, masterInfo);
+        updateDriverAndDomain(driver, masterInfo);
         mesosEventClient.registered(false);
 
         offerProcessor.start();
@@ -108,7 +112,7 @@ public class FrameworkScheduler implements Scheduler {
     @Override
     public void reregistered(SchedulerDriver driver, Protos.MasterInfo masterInfo) {
         LOGGER.info("Re-registered with master: {}", TextFormat.shortDebugString(masterInfo));
-        updateStaticData(driver, masterInfo);
+        updateDriverAndDomain(driver, masterInfo);
         mesosEventClient.registered(true);
     }
 
@@ -184,7 +188,7 @@ public class FrameworkScheduler implements Scheduler {
         SchedulerUtils.hardExit(SchedulerErrorCode.ERROR);
     }
 
-    private static void updateStaticData(SchedulerDriver driver, Protos.MasterInfo masterInfo) {
+    private static void updateDriverAndDomain(SchedulerDriver driver, Protos.MasterInfo masterInfo) {
         Driver.setDriver(driver);
         if (masterInfo.hasDomain()) {
             IsLocalRegionRule.setLocalDomain(masterInfo.getDomain());
