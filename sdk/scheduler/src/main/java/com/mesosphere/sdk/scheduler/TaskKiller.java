@@ -121,6 +121,8 @@ public final class TaskKiller {
                     LOGGER.warn("Task was not scheduled for killing: {}", taskStatus.getTaskId().getValue());
                 }
             }
+        } else {
+            LOGGER.info("Updating taskStatus: {}", taskStatus);
         }
     }
 
