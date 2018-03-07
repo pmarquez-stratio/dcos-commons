@@ -31,16 +31,4 @@ A good overview of X-Pack can be found [here](https://www.elastic.co/guide/en/x-
 
 #### Kibana
 
-To use the DC/OS Kibana service in tandem with DC/OS {{ data.techName }} when the latter has Transport Encryption enabled, install (or update) Kibana with the following options in addition to your own:
-```json
-{
-    "kibana": {
-        "xpack_enabled": true,
-        "elasticsearch_tls": true,
-        "elasticsearch_url": "https://<elastic-coordinator-vip>"
-    }
-}
-```
-This configures the Kibana service to connect securely to the {{ data.techName }} service.
-
-*Note*: Currently, the Kibana service does not support Transport Encryption for its own clients.
+DC/OS Kibana does not currently work with a DC/OS {{ data.techName }} configured with Transport Encryption enabled. It also does not currently support Transport Encryption for its own clients.
