@@ -1,5 +1,6 @@
 package com.mesosphere.sdk.scheduler;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.mesosphere.sdk.offer.LoggingUtils;
 import com.mesosphere.sdk.scheduler.plan.PodInstanceRequirement;
 import com.mesosphere.sdk.scheduler.plan.Step;
@@ -18,16 +19,41 @@ import java.util.stream.Collectors;
  * This class determines whether offers should be revived based on changes to the work being processed by the scheduler.
  */
 public class ReviveManager {
+
+    /**
+     * We use a singleton {@link TokenBucket} because we want rate limits on revive calls to be enforced across all
+     * running services in the scheduler.
+     */
+    private static final TokenBucket TOKEN_BUCKET_INSTANCE = TokenBucket.newBuilder().build();
+
     private final Logger logger;
     private final TokenBucket tokenBucket;
 
     private Set<WorkItem> candidates = new HashSet<>();
 
-    public ReviveManager(String serviceName) {
-        this(serviceName, TokenBucket.newBuilder().build());
+    /**
+     * Resets revive limits in the global token bucket, for tests.
+     */
+    @VisibleForTesting
+    public static void resetTimers() {
+        TOKEN_BUCKET_INSTANCE.reset();
     }
 
-    public ReviveManager(String serviceName, TokenBucket tokenBucket) {
+    /**
+     * Creates an instance using the singleton {@link TokenBucket} instance. The {@link TokenBucket} is a singleton
+     * because we want rate limits to be enforced across all running services in the scheduler.
+     *
+     * @param serviceName the name of the service, used for logging
+     */
+    public ReviveManager(String serviceName) {
+        this(serviceName, TOKEN_BUCKET_INSTANCE);
+    }
+
+    /**
+     * Creates an instance with a custom {@link TokenBucket} instead of the singleton instance. Only for use in tests.
+     */
+    @VisibleForTesting
+    ReviveManager(String serviceName, TokenBucket tokenBucket) {
         this.logger = LoggingUtils.getLogger(getClass(), serviceName);
         this.tokenBucket = tokenBucket;
     }

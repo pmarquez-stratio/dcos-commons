@@ -30,7 +30,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-public class RunsEventClientTest {
+public class QueueEventClientTest {
 
     private static final Answer<OfferResponse> CONSUME_FIRST_OFFER = new Answer<OfferResponse>() {
         @Override
@@ -80,9 +80,9 @@ public class RunsEventClientTest {
     @Mock private ServiceScheduler mockClient8;
     @Mock private ServiceScheduler mockClient9;
     @Mock private SchedulerConfig mockSchedulerConfig;
-    @Mock private RunsEventClient.UninstallCallback mockUninstallCallback;
+    @Mock private QueueEventClient.UninstallCallback mockUninstallCallback;
 
-    private RunsEventClient client;
+    private QueueEventClient client;
 
     @Before
     public void beforeEach() {
@@ -96,7 +96,7 @@ public class RunsEventClientTest {
         when(mockClient7.getName()).thenReturn("7");
         when(mockClient8.getName()).thenReturn("8");
         when(mockClient9.getName()).thenReturn("9");
-        client = new RunsEventClient(mockSchedulerConfig, mockUninstallCallback);
+        client = new QueueEventClient(mockSchedulerConfig, mockUninstallCallback);
     }
 
     @Test

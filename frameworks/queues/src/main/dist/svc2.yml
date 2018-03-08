@@ -1,13 +1,13 @@
-name: job2
+name: barsvc
 scheduler:
   user: {{FRAMEWORK_USER}}
 pods:
-  pod2:
+  barpod:
     count: 2
     tasks:
       node:
         goal: RUNNING
-        cmd: "echo queue2 >> output && sleep $SLEEP_DURATION"
+        cmd: "echo bar >> output && sleep $SLEEP_DURATION"
         cpus: {{NODE_CPUS}}
         memory: {{NODE_MEM}}
         env:

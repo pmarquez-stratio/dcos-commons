@@ -11,7 +11,7 @@ import com.mesosphere.sdk.state.StateStore;
 /**
  * Retrieves objects which are necessary for servicing HTTP requests against per-run endpoints.
  */
-public interface RunInfoProvider {
+public interface QueueInfoProvider {
 
     /**
      * Returns the list of currently available runs.

@@ -2,7 +2,7 @@ package com.mesosphere.sdk.queues.http.endpoints;
 
 import com.mesosphere.sdk.http.queries.PodQueries;
 import com.mesosphere.sdk.http.types.PrettyJsonResource;
-import com.mesosphere.sdk.queues.http.types.RunInfoProvider;
+import com.mesosphere.sdk.queues.http.types.QueueInfoProvider;
 import com.mesosphere.sdk.scheduler.recovery.RecoveryType;
 import com.mesosphere.sdk.specification.ServiceSpec;
 import com.mesosphere.sdk.state.ConfigStore;
@@ -21,14 +21,14 @@ import javax.ws.rs.core.Response;
  * pods.
  */
 @Path("/v1/runs")
-public class RunsPodResource extends PrettyJsonResource {
+public class QueuePodResource extends PrettyJsonResource {
 
-    private final RunInfoProvider runInfoProvider;
+    private final QueueInfoProvider runInfoProvider;
 
     /**
      * Creates a new instance which retrieves task/pod state from the provided {@link StateStore}.
      */
-    public RunsPodResource(RunInfoProvider runInfoProvider) {
+    public QueuePodResource(QueueInfoProvider runInfoProvider) {
         this.runInfoProvider = runInfoProvider;
     }
 
@@ -40,7 +40,7 @@ public class RunsPodResource extends PrettyJsonResource {
     public Response list(@PathParam("runName") String runName) {
         Optional<StateStore> stateStore = runInfoProvider.getStateStore(runName);
         if (!stateStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return PodQueries.list(stateStore.get());
     }
@@ -53,7 +53,7 @@ public class RunsPodResource extends PrettyJsonResource {
     public Response getStatuses(@PathParam("runName") String runName) {
         Optional<StateStore> stateStore = runInfoProvider.getStateStore(runName);
         if (!stateStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return PodQueries.getStatuses(stateStore.get(), runName);
     }
@@ -66,7 +66,7 @@ public class RunsPodResource extends PrettyJsonResource {
     public Response getStatus(@PathParam("runName") String runName, @PathParam("name") String podInstanceName) {
         Optional<StateStore> stateStore = runInfoProvider.getStateStore(runName);
         if (!stateStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return PodQueries.getStatus(stateStore.get(), podInstanceName);
     }
@@ -79,7 +79,7 @@ public class RunsPodResource extends PrettyJsonResource {
     public Response getInfo(@PathParam("runName") String runName, @PathParam("name") String podInstanceName) {
         Optional<StateStore> stateStore = runInfoProvider.getStateStore(runName);
         if (!stateStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return PodQueries.getInfo(stateStore.get(), podInstanceName);
     }
@@ -93,7 +93,7 @@ public class RunsPodResource extends PrettyJsonResource {
             @PathParam("runName") String runName, @PathParam("name") String podInstanceName, String bodyPayload) {
         Optional<StateStore> stateStore = runInfoProvider.getStateStore(runName);
         if (!stateStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return PodQueries.pause(stateStore.get(), podInstanceName, bodyPayload);
     }
@@ -107,7 +107,7 @@ public class RunsPodResource extends PrettyJsonResource {
             @PathParam("runName") String runName, @PathParam("name") String podInstanceName, String bodyPayload) {
         Optional<StateStore> stateStore = runInfoProvider.getStateStore(runName);
         if (!stateStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return PodQueries.resume(stateStore.get(), podInstanceName, bodyPayload);
     }
@@ -133,11 +133,11 @@ public class RunsPodResource extends PrettyJsonResource {
     private Response restart(String runName, String podInstanceName, RecoveryType recoveryType) {
         Optional<StateStore> stateStore = runInfoProvider.getStateStore(runName);
         if (!stateStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         Optional<ConfigStore<ServiceSpec>> configStore = runInfoProvider.getConfigStore(runName);
         if (!configStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return PodQueries.restart(stateStore.get(), configStore.get(), podInstanceName, recoveryType);
     }

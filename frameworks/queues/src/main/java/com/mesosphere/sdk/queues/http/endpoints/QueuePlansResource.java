@@ -2,7 +2,7 @@ package com.mesosphere.sdk.queues.http.endpoints;
 
 import com.mesosphere.sdk.http.queries.PlansQueries;
 import com.mesosphere.sdk.http.types.PrettyJsonResource;
-import com.mesosphere.sdk.queues.http.types.RunInfoProvider;
+import com.mesosphere.sdk.queues.http.types.QueueInfoProvider;
 import com.mesosphere.sdk.scheduler.plan.PlanCoordinator;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.GET;
@@ -20,14 +20,14 @@ import java.util.Optional;
  * API for management of Plan(s).
  */
 @Path("/v1/runs")
-public class RunsPlansResource extends PrettyJsonResource {
+public class QueuePlansResource extends PrettyJsonResource {
 
-    private final RunInfoProvider runInfoProvider;
+    private final QueueInfoProvider runInfoProvider;
 
     /**
      * Creates a new instance which allows access to plans for runs in the provider.
      */
-    public RunsPlansResource(RunInfoProvider runInfoProvider) {
+    public QueuePlansResource(QueueInfoProvider runInfoProvider) {
         this.runInfoProvider = runInfoProvider;
     }
 
@@ -39,7 +39,7 @@ public class RunsPlansResource extends PrettyJsonResource {
     public Response list(@PathParam("runName") String runName) {
         Optional<PlanCoordinator> planCoordinator = runInfoProvider.getPlanCoordinator(runName);
         if (!planCoordinator.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return PlansQueries.list(planCoordinator.get().getPlanManagers());
     }
@@ -52,7 +52,7 @@ public class RunsPlansResource extends PrettyJsonResource {
     public Response get(@PathParam("runName") String runName, @PathParam("planName") String planName) {
         Optional<PlanCoordinator> planCoordinator = runInfoProvider.getPlanCoordinator(runName);
         if (!planCoordinator.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return PlansQueries.get(planCoordinator.get().getPlanManagers(), planName);
     }
@@ -69,7 +69,7 @@ public class RunsPlansResource extends PrettyJsonResource {
             Map<String, String> parameters) {
         Optional<PlanCoordinator> planCoordinator = runInfoProvider.getPlanCoordinator(runName);
         if (!planCoordinator.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return PlansQueries.start(planCoordinator.get().getPlanManagers(), planName, parameters);
     }
@@ -82,7 +82,7 @@ public class RunsPlansResource extends PrettyJsonResource {
     public Response stop(@PathParam("runName") String runName, @PathParam("planName") String planName) {
         Optional<PlanCoordinator> planCoordinator = runInfoProvider.getPlanCoordinator(runName);
         if (!planCoordinator.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return PlansQueries.stop(planCoordinator.get().getPlanManagers(), planName);
     }
@@ -98,7 +98,7 @@ public class RunsPlansResource extends PrettyJsonResource {
             @QueryParam("phase") String phase) {
         Optional<PlanCoordinator> planCoordinator = runInfoProvider.getPlanCoordinator(runName);
         if (!planCoordinator.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return PlansQueries.continuePlan(planCoordinator.get().getPlanManagers(), planName, phase);
     }
@@ -114,7 +114,7 @@ public class RunsPlansResource extends PrettyJsonResource {
             @QueryParam("phase") String phase) {
         Optional<PlanCoordinator> planCoordinator = runInfoProvider.getPlanCoordinator(runName);
         if (!planCoordinator.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return PlansQueries.interrupt(planCoordinator.get().getPlanManagers(), planName, phase);
     }
@@ -131,7 +131,7 @@ public class RunsPlansResource extends PrettyJsonResource {
             @QueryParam("step") String step) {
         Optional<PlanCoordinator> planCoordinator = runInfoProvider.getPlanCoordinator(runName);
         if (!planCoordinator.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return PlansQueries.forceComplete(planCoordinator.get().getPlanManagers(), planName, phase, step);
     }
@@ -148,7 +148,7 @@ public class RunsPlansResource extends PrettyJsonResource {
             @QueryParam("step") String step) {
         Optional<PlanCoordinator> planCoordinator = runInfoProvider.getPlanCoordinator(runName);
         if (!planCoordinator.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return PlansQueries.restart(planCoordinator.get().getPlanManagers(), planName, phase, step);
     }

@@ -6,6 +6,7 @@ import com.mesosphere.sdk.offer.LoggingUtils;
 import com.mesosphere.sdk.offer.evaluate.PodInfoBuilder;
 import com.mesosphere.sdk.scheduler.DefaultScheduler;
 import com.mesosphere.sdk.scheduler.FrameworkScheduler;
+import com.mesosphere.sdk.scheduler.ReviveManager;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.scheduler.ServiceScheduler;
 import com.mesosphere.sdk.scheduler.TaskKiller;
@@ -302,6 +303,8 @@ public class ServiceTestRunner {
 
         // Disable background TaskKiller thread, to avoid erroneous kill invocations
         TaskKiller.reset(false);
+        // Reset revive manager token bucket, to ensure semi-consistent timer state and avoid unnecessary waiting.
+        ReviveManager.resetTimers();
 
         Map<String, String> schedulerEnvironment =
                 CosmosRenderer.renderSchedulerEnvironment(cosmosOptions, buildTemplateParams);

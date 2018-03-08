@@ -1,6 +1,6 @@
 package com.mesosphere.sdk.queues.scheduler;
 
-import com.mesosphere.sdk.queues.http.endpoints.RunsArtifactResource;
+import com.mesosphere.sdk.queues.http.endpoints.QueueArtifactResource;
 import com.mesosphere.sdk.scheduler.DefaultScheduler;
 import com.mesosphere.sdk.scheduler.EnvStore;
 import com.mesosphere.sdk.scheduler.FrameworkConfig;
@@ -29,7 +29,7 @@ public class Main {
         EnvStore envStore = EnvStore.fromEnv();
         SchedulerConfig schedulerConfig = SchedulerConfig.fromEnvStore(envStore);
         FrameworkConfig frameworkConfig = FrameworkConfig.fromEnvStore(envStore);
-        RunsEventClient client = new RunsEventClient(schedulerConfig, new RunsEventClient.UninstallCallback() {
+        QueueEventClient client = new QueueEventClient(schedulerConfig, new QueueEventClient.UninstallCallback() {
             @Override
             public void uninstalled(String name) {
                 LOGGER.info("Job has completed uninstall: {}", name);
@@ -62,7 +62,7 @@ public class Main {
                     // - In ZK, store data under "dcos-service-<fwkName>/Services/<jobName>"
                     .setStorageNamespace(serviceSpec.getName())
                     // - Config templates are served by JobsArtifactResource rather than default ArtifactResource
-                    .setTemplateUrlFactory(RunsArtifactResource.getUrlFactory(
+                    .setTemplateUrlFactory(QueueArtifactResource.getUrlFactory(
                             frameworkConfig.getFrameworkName(), serviceSpec.getName()))
                     // If the service was previously marked for uninstall, it will be built as an UninstallScheduler
                     .build());

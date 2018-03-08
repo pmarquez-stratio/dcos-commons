@@ -1,13 +1,13 @@
-name: job3
+name: bazsvc
 scheduler:
   user: {{FRAMEWORK_USER}}
 pods:
-  pod3:
+  bazpod:
     count: 2
     tasks:
       node:
         goal: RUNNING
-        cmd: "echo queue3 >> output && sleep $SLEEP_DURATION"
+        cmd: "echo baz >> output && sleep $SLEEP_DURATION"
         cpus: {{NODE_CPUS}}
         memory: {{NODE_MEM}}
         env:

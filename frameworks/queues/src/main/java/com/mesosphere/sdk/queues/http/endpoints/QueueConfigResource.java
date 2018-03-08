@@ -9,7 +9,7 @@ import javax.ws.rs.core.Response;
 
 import com.mesosphere.sdk.http.queries.ConfigQueries;
 import com.mesosphere.sdk.http.types.PrettyJsonResource;
-import com.mesosphere.sdk.queues.http.types.RunInfoProvider;
+import com.mesosphere.sdk.queues.http.types.QueueInfoProvider;
 import com.mesosphere.sdk.specification.ServiceSpec;
 import com.mesosphere.sdk.state.ConfigStore;
 
@@ -17,11 +17,11 @@ import com.mesosphere.sdk.state.ConfigStore;
  * A read-only API for accessing active and inactive configurations from persistent storage.
  */
 @Path("/v1/runs")
-public class RunsConfigResource extends PrettyJsonResource {
+public class QueueConfigResource extends PrettyJsonResource {
 
-    private final RunInfoProvider runInfoProvider;
+    private final QueueInfoProvider runInfoProvider;
 
-    public RunsConfigResource(RunInfoProvider runInfoProvider) {
+    public QueueConfigResource(QueueInfoProvider runInfoProvider) {
         this.runInfoProvider = runInfoProvider;
     }
 
@@ -33,7 +33,7 @@ public class RunsConfigResource extends PrettyJsonResource {
     public Response getConfigurationIds(@PathParam("runName") String runName) {
         Optional<ConfigStore<ServiceSpec>> configStore = runInfoProvider.getConfigStore(runName);
         if (!configStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return ConfigQueries.<ServiceSpec>getConfigurationIds(configStore.get());
     }
@@ -47,7 +47,7 @@ public class RunsConfigResource extends PrettyJsonResource {
             @PathParam("runName") String runName, @PathParam("configurationId") String configurationId) {
         Optional<ConfigStore<ServiceSpec>> configStore = runInfoProvider.getConfigStore(runName);
         if (!configStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return ConfigQueries.<ServiceSpec>getConfiguration(configStore.get(), configurationId);
     }
@@ -60,7 +60,7 @@ public class RunsConfigResource extends PrettyJsonResource {
     public Response getTargetId(@PathParam("runName") String runName) {
         Optional<ConfigStore<ServiceSpec>> configStore = runInfoProvider.getConfigStore(runName);
         if (!configStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return ConfigQueries.getTargetId(configStore.get());
     }
@@ -73,7 +73,7 @@ public class RunsConfigResource extends PrettyJsonResource {
     public Response getTarget(@PathParam("runName") String runName) {
         Optional<ConfigStore<ServiceSpec>> configStore = runInfoProvider.getConfigStore(runName);
         if (!configStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return ConfigQueries.getTarget(configStore.get());
     }

@@ -1,7 +1,7 @@
 package com.mesosphere.sdk.queues.http.endpoints;
 
 import com.mesosphere.sdk.http.ResponseUtils;
-import com.mesosphere.sdk.queues.http.types.RunInfoProvider;
+import com.mesosphere.sdk.queues.http.types.QueueInfoProvider;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -13,11 +13,11 @@ import org.json.JSONArray;
  * A read-only API for listing available runs.
  */
 @Path("/v1/runs")
-public class RunsResource {
+public class QueueResource {
 
-    private final RunInfoProvider runInfoProvider;
+    private final QueueInfoProvider runInfoProvider;
 
-    public RunsResource(RunInfoProvider runInfoProvider) {
+    public QueueResource(QueueInfoProvider runInfoProvider) {
         this.runInfoProvider = runInfoProvider;
     }
 

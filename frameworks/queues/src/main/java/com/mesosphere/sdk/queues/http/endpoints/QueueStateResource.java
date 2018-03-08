@@ -2,7 +2,7 @@ package com.mesosphere.sdk.queues.http.endpoints;
 
 import com.mesosphere.sdk.http.queries.StateQueries;
 import com.mesosphere.sdk.http.types.PropertyDeserializer;
-import com.mesosphere.sdk.queues.http.types.RunInfoProvider;
+import com.mesosphere.sdk.queues.http.types.QueueInfoProvider;
 import com.mesosphere.sdk.state.StateStore;
 import org.glassfish.jersey.media.multipart.FormDataContentDisposition;
 import org.glassfish.jersey.media.multipart.FormDataParam;
@@ -17,15 +17,15 @@ import java.util.Optional;
  * being used.
  */
 @Path("/v1/runs")
-public class RunsStateResource {
+public class QueueStateResource {
 
-    private final RunInfoProvider runInfoProvider;
+    private final QueueInfoProvider runInfoProvider;
     private final PropertyDeserializer propertyDeserializer;
 
     /**
      * Creates a new StateResource which returns content for runs in the provider.
      */
-    public RunsStateResource(RunInfoProvider runInfoProvider, PropertyDeserializer propertyDeserializer) {
+    public QueueStateResource(QueueInfoProvider runInfoProvider, PropertyDeserializer propertyDeserializer) {
         this.runInfoProvider = runInfoProvider;
         this.propertyDeserializer = propertyDeserializer;
     }
@@ -39,7 +39,7 @@ public class RunsStateResource {
     public Response getFiles(@PathParam("runName") String runName) {
         Optional<StateStore> stateStore = runInfoProvider.getStateStore(runName);
         if (!stateStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return StateQueries.getFiles(stateStore.get());
     }
@@ -53,7 +53,7 @@ public class RunsStateResource {
     public Response getFile(@PathParam("runName") String runName, @PathParam("file") String fileName) {
         Optional<StateStore> stateStore = runInfoProvider.getStateStore(runName);
         if (!stateStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return StateQueries.getFile(stateStore.get(), fileName);
     }
@@ -70,7 +70,7 @@ public class RunsStateResource {
             @FormDataParam("file") FormDataContentDisposition fileDetails) {
         Optional<StateStore> stateStore = runInfoProvider.getStateStore(runName);
         if (!stateStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return StateQueries.putFile(stateStore.get(), uploadedInputStream, fileDetails);
     }
@@ -83,7 +83,7 @@ public class RunsStateResource {
     public Response getTaskNamesToZones(@PathParam("runName") String runName) {
         Optional<StateStore> stateStore = runInfoProvider.getStateStore(runName);
         if (!stateStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return StateQueries.getTaskNamesToZones(stateStore.get());
     }
@@ -96,7 +96,7 @@ public class RunsStateResource {
     public Response getTaskNameToZone(@PathParam("runName") String runName, @PathParam("taskName") String taskName) {
         Optional<StateStore> stateStore = runInfoProvider.getStateStore(runName);
         if (!stateStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return StateQueries.getTaskNameToZone(stateStore.get(), taskName);
     }
@@ -110,7 +110,7 @@ public class RunsStateResource {
             @PathParam("runName") String runName, @PathParam("podType") String podType, @PathParam("ip") String ip) {
         Optional<StateStore> stateStore = runInfoProvider.getStateStore(runName);
         if (!stateStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return StateQueries.getTaskIPsToZones(stateStore.get(), podType, ip);
     }
@@ -123,7 +123,7 @@ public class RunsStateResource {
     public Response getPropertyKeys(@PathParam("runName") String runName) {
         Optional<StateStore> stateStore = runInfoProvider.getStateStore(runName);
         if (!stateStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return StateQueries.getPropertyKeys(stateStore.get());
     }
@@ -136,7 +136,7 @@ public class RunsStateResource {
     public Response getProperty(@PathParam("runName") String runName, @PathParam("key") String key) {
         Optional<StateStore> stateStore = runInfoProvider.getStateStore(runName);
         if (!stateStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return StateQueries.getProperty(stateStore.get(), propertyDeserializer, key);
     }
@@ -149,7 +149,7 @@ public class RunsStateResource {
     public Response refreshCache(@PathParam("runName") String runName) {
         Optional<StateStore> stateStore = runInfoProvider.getStateStore(runName);
         if (!stateStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return StateQueries.refreshCache(stateStore.get());
     }

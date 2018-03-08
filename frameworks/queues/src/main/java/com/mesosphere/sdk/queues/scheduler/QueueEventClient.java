@@ -41,7 +41,7 @@ import com.mesosphere.sdk.scheduler.uninstall.UninstallScheduler;
 /**
  * Mesos client which wraps running runs, routing Mesos events to the appropriate runs.
  */
-public class RunsEventClient implements MesosEventClient {
+public class QueueEventClient implements MesosEventClient {
 
     /**
      * Interface for notifying the caller that added runs have completed uninstall.
@@ -49,21 +49,21 @@ public class RunsEventClient implements MesosEventClient {
     public interface UninstallCallback {
         /**
          * Invoked when a given run has completed its uninstall as triggered by
-         * {@link RunsEventClient#uninstallRun(String)}. After this has been called, re-adding the run to the
-         * {@link RunsEventClient} will result in launching a new instance from scratch.
+         * {@link QueueEventClient#uninstallRun(String)}. After this has been called, re-adding the run to the
+         * {@link QueueEventClient} will result in launching a new instance from scratch.
          */
         void uninstalled(String runName);
     }
 
-    private static final Logger LOGGER = LoggingUtils.getLogger(RunsEventClient.class);
+    private static final Logger LOGGER = LoggingUtils.getLogger(QueueEventClient.class);
 
     private final DeregisterStep deregisterStep;
     private final Optional<Plan> uninstallPlan;
-    private final DefaultRunInfoProvider runInfoProvider;
+    private final DefaultQueueInfoProvider runInfoProvider;
     private final UninstallCallback uninstallCallback;
 
-    public RunsEventClient(SchedulerConfig schedulerConfig, UninstallCallback uninstallCallback) {
-        this.runInfoProvider = new DefaultRunInfoProvider();
+    public QueueEventClient(SchedulerConfig schedulerConfig, UninstallCallback uninstallCallback) {
+        this.runInfoProvider = new DefaultQueueInfoProvider();
         this.uninstallCallback = uninstallCallback;
 
         if (schedulerConfig.isUninstallEnabled()) {
@@ -90,7 +90,7 @@ public class RunsEventClient implements MesosEventClient {
      * @return {@code this}
      * @throws IllegalArgumentException if the run name is already present
      */
-    public RunsEventClient putRun(ServiceScheduler run) {
+    public QueueEventClient putRun(ServiceScheduler run) {
         Map<String, ServiceScheduler> runs = runInfoProvider.lockRW();
         LOGGER.info("Adding service: {} (now {} services)", run.getName(), runs.size() + 1);
         try {
@@ -118,7 +118,7 @@ public class RunsEventClient implements MesosEventClient {
      * @return {@code this}
      * @throws IllegalArgumentException if the name does not exist
      */
-    public RunsEventClient uninstallRun(String name) {
+    public QueueEventClient uninstallRun(String name) {
         // UNINSTALL FLOW:
         // 1. uninstallRun("foo") is called. This converts the run to an UninstallScheduler.
         // 2. UninstallScheduler internally flags its StateStore with an uninstall bit if one is not already present.
@@ -208,15 +208,8 @@ public class RunsEventClient implements MesosEventClient {
                 runs.size(), runs.size() == 1 ? "" : "s");
         try {
             if (runs.isEmpty()) {
-                if (uninstallPlan.isPresent()) {
-                    // We're uninstalling everything and all runs have been cleaned up. Tell the caller that they can
-                    // finish with final framework cleanup. After they've finished, they will invoke unregistered(), at
-                    // which point we can set our deploy plan to complete.
-                    return OfferResponse.finished();
-                } else {
-                    // If we don't have any clients, then WE aren't ready. Decline short.
-                    anyNotReady = true;
-                }
+                // If we don't have any clients, then WE aren't ready. Decline short.
+                anyNotReady = true;
             }
             for (ServiceScheduler run : runs) {
                 OfferResponse response = run.offers(remainingOffers);
@@ -254,6 +247,7 @@ public class RunsEventClient implements MesosEventClient {
             runInfoProvider.unlockR();
         }
 
+        boolean allRemoved = false;
         if (!runsToRemove.isEmpty()) {
             // Note: It's possible that we can have a race where we attempt to remove the same run twice. This is fine.
             //       (Picture two near-simultaneous calls to offers(): Both send offers, both get FINISHED back, ...)
@@ -263,6 +257,9 @@ public class RunsEventClient implements MesosEventClient {
             try {
                 for (String run : runsToRemove) {
                     runsMap.remove(run);
+                }
+                if (runsMap.isEmpty()) {
+                    allRemoved = true;
                 }
             } finally {
                 runInfoProvider.unlockRW();
@@ -276,12 +273,25 @@ public class RunsEventClient implements MesosEventClient {
             }
         }
 
-        return anyNotReady
-                // Return the subset of recommendations that could still be performed, but tell upstream to
-                // short-decline the unused offers:
-                ? OfferResponse.notReady(recommendations)
-                // All clients were able to process offers, so tell upstream to long-decline the unused offers:
-                : OfferResponse.processed(recommendations);
+        if (allRemoved) {
+            // We just removed the last client(s). Should the rest of the framework be torn down?
+            if (uninstallPlan.isPresent()) {
+                // Yes: We're uninstalling everything and all runs have been cleaned up. Tell the caller that they can
+                // finish with final framework cleanup. After they've finished, they will invoke unregistered(), at
+                // which point we can set our deploy plan to complete.
+                return OfferResponse.finished();
+            } else {
+                // No: We're just not actively running anything. Decline short until we have runs.
+                return OfferResponse.notReady(recommendations);
+            }
+        } else if (anyNotReady) {
+            // One or more clients said they weren't ready, or we don't have any clients. Tell upstream to short-decline
+            // the unused offers, but still perform any operations returned by the ready clients.
+            return OfferResponse.notReady(recommendations);
+        } else {
+            // We have one or more clients and they were all able to process offers, so tell upstream to long-decline.
+            return OfferResponse.processed(recommendations);
+        }
     }
 
     /**
@@ -360,12 +370,13 @@ public class RunsEventClient implements MesosEventClient {
                 // Add those to unexpectedResources.
                 // Note: We're careful to only invoke this once per service, as the call is likely to be expensive.
                 UnexpectedResourcesResponse response = run.getUnexpectedResources(offersToSend);
-                LOGGER.info("  {} cleanup result: {} with {} unexpected resources in {} offers",
+                LOGGER.info("  {} cleanup result: {} with {} unexpected resources in {} offer{}",
                         serviceName,
                         response.result,
                         response.offerResources.stream()
                                 .collect(Collectors.summingInt(or -> or.getResources().size())),
-                        response.offerResources.size());
+                        response.offerResources.size(),
+                        response.offerResources.size() == 1 ? "" : "s");
                 switch (response.result) {
                 case FAILED:
                     // We should be able to safely skip this service and proceed to the next one. For this round,
@@ -440,12 +451,12 @@ public class RunsEventClient implements MesosEventClient {
         return Arrays.asList(
                 new HealthResource(planManagers),
                 new PlansResource(planManagers),
-                new RunsResource(runInfoProvider),
-                new RunsArtifactResource(runInfoProvider),
-                new RunsConfigResource(runInfoProvider),
-                new RunsPlansResource(runInfoProvider),
-                new RunsPodResource(runInfoProvider),
-                new RunsStateResource(runInfoProvider, new StringPropertyDeserializer()));
+                new QueueResource(runInfoProvider),
+                new QueueArtifactResource(runInfoProvider),
+                new QueueConfigResource(runInfoProvider),
+                new QueuePlansResource(runInfoProvider),
+                new QueuePodResource(runInfoProvider),
+                new QueueStateResource(runInfoProvider, new StringPropertyDeserializer()));
     }
 
     /**

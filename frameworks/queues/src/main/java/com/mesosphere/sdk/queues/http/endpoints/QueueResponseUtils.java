@@ -7,9 +7,9 @@ import com.mesosphere.sdk.http.ResponseUtils;
 /**
  * Utilities for common responses to Runs endpoints.
  */
-public class RunResponseUtils {
+public class QueueResponseUtils {
 
-    private RunResponseUtils() {
+    private QueueResponseUtils() {
         // do not instantiate
     }
 

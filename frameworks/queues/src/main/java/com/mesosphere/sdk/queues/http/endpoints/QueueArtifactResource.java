@@ -2,7 +2,7 @@ package com.mesosphere.sdk.queues.http.endpoints;
 
 import com.mesosphere.sdk.http.EndpointUtils;
 import com.mesosphere.sdk.http.queries.ArtifactQueries;
-import com.mesosphere.sdk.queues.http.types.RunInfoProvider;
+import com.mesosphere.sdk.queues.http.types.QueueInfoProvider;
 import com.mesosphere.sdk.specification.ServiceSpec;
 import com.mesosphere.sdk.state.ConfigStore;
 import javax.ws.rs.GET;
@@ -17,18 +17,18 @@ import java.util.UUID;
  * A read-only API for accessing file artifacts (e.g. config templates) for retrieval by pods.
  */
 @Path("/v1/runs")
-public class RunsArtifactResource {
+public class QueueArtifactResource {
 
     private static final String RUN_ARTIFACT_URI_FORMAT = "http://%s/v1/runs/%s/artifacts/template/%s/%s/%s/%s";
 
-    private final RunInfoProvider runInfoProvider;
+    private final QueueInfoProvider runInfoProvider;
 
-    public RunsArtifactResource(RunInfoProvider runInfoProvider) {
+    public QueueArtifactResource(QueueInfoProvider runInfoProvider) {
         this.runInfoProvider = runInfoProvider;
     }
 
     /**
-     * Returns a factory for schedulers which use {@link RunsArtifactResource}.
+     * Returns a factory for schedulers which use {@link QueueArtifactResource}.
      *
      * @param frameworkName the name of the scheduler framework
      * @param serviceName the name of a run/service being managed by the scheduler
@@ -57,7 +57,7 @@ public class RunsArtifactResource {
             @PathParam("configurationName") String configurationName) {
         Optional<ConfigStore<ServiceSpec>> configStore = runInfoProvider.getConfigStore(runName);
         if (!configStore.isPresent()) {
-            return RunResponseUtils.runNotFoundResponse(runName);
+            return QueueResponseUtils.runNotFoundResponse(runName);
         }
         return ArtifactQueries.getTemplate(configStore.get(), configurationId, podType, taskName, configurationName);
     }

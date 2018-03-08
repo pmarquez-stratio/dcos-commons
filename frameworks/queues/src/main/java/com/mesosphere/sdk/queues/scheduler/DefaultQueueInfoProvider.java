@@ -9,7 +9,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import com.mesosphere.sdk.queues.http.types.RunInfoProvider;
+import com.mesosphere.sdk.queues.http.types.QueueInfoProvider;
 import com.mesosphere.sdk.scheduler.ServiceScheduler;
 import com.mesosphere.sdk.scheduler.plan.PlanCoordinator;
 import com.mesosphere.sdk.specification.ServiceSpec;
@@ -17,12 +17,12 @@ import com.mesosphere.sdk.state.ConfigStore;
 import com.mesosphere.sdk.state.StateStore;
 
 /**
- * Default implementation of {@link RunInfoProvider} which also handles central storage of active runs.
+ * Default implementation of {@link QueueInfoProvider} which also handles central storage of active runs.
  *
  * The interface represents what's visible to run HTTP resources, whereas this implementation represents what's
  * available to {@code runsEventClient}.
  */
-public class DefaultRunInfoProvider implements RunInfoProvider {
+public class DefaultQueueInfoProvider implements QueueInfoProvider {
 
     private final ReadWriteLock internalLock = new ReentrantReadWriteLock();
     private final Lock rlock = internalLock.readLock();

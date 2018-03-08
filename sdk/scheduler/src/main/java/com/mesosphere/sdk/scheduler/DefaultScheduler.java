@@ -214,14 +214,14 @@ public class DefaultScheduler extends ServiceScheduler {
         // See which offers are useful to the plans, then omit the ones that shouldn't be launched.
         List<OfferRecommendation> offerRecommendations = getOfferRecommendations(logger, planScheduler, offers, steps);
 
-        logger.info("{} Offer{} processed: {} accepted by {} scheduler: {}",
+        logger.info("{} Offer{} processed by {}: {} recommendations from offers: {}",
                 offers.size(),
                 offers.size() == 1 ? "" : "s",
-                offerRecommendations.size(),
                 serviceSpec.getName(),
+                offerRecommendations.size(),
                 offerRecommendations.stream()
                         .map(rec -> rec.getOffer().getId().getValue())
-                        .collect(Collectors.toList()));
+                        .collect(Collectors.toSet()));
 
         try {
             launchRecorder.record(offerRecommendations);
