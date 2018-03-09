@@ -38,7 +38,6 @@ public class ResourceCleanupStep extends UninstallStep {
      */
     public void updateResourceStatus(Set<String> uninstalledResourceIds) {
         if (uninstalledResourceIds.contains(resourceId)) {
-            logger.info("Completed dereservation of resource {}", resourceId);
             setStatus(Status.COMPLETE);
         }
     }

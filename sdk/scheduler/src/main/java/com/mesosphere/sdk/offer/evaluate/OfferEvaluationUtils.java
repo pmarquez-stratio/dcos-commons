@@ -64,14 +64,14 @@ class OfferEvaluationUtils {
         MesosResource mesosResource = mesosResourceOptional.get();
 
         if (ValueUtils.equal(mesosResource.getValue(), resourceSpec.getValue())) {
-            LOGGER.info("Resource '{}' matches required value: {}",
+            LOGGER.info("Resource '{}' matches required value: {} {}",
                     resourceSpec.getName(),
                     TextFormat.shortDebugString(mesosResource.getValue()),
-                    TextFormat.shortDebugString(resourceSpec.getValue()));
+                    TextFormat.shortDebugString(resourceSpec.getValue()),
+                    resourceId.isPresent() ? "(previously reserved)" : "(requires RESERVE operation)");
 
             if (!resourceId.isPresent()) {
                 // Initial reservation of resources
-                LOGGER.info("Resource '{}' requires a RESERVE operation", resourceSpec.getName());
                 Protos.Resource resource = ResourceBuilder.fromSpec(serviceName, resourceSpec, resourceId)
                         .setMesosResource(mesosResource)
                         .build();

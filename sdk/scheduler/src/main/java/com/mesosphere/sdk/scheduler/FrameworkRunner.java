@@ -97,7 +97,7 @@ public class FrameworkRunner {
         Protos.Status status = new SchedulerDriverFactory()
                 .create(frameworkScheduler, frameworkInfo, zkUri, schedulerConfig)
                 .run();
-        LOGGER.error("Scheduler driver exited with status: {}", status);
+        LOGGER.info("Scheduler driver exited with status: {}", status);
         // DRIVER_STOPPED will occur when we call stop(boolean) during uninstall.
         // When this happens, we want to continue running so that we can advertise that the uninstall plan is complete.
         if (status == Protos.Status.DRIVER_STOPPED) {

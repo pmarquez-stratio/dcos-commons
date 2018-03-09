@@ -42,8 +42,9 @@ public class DefaultPlanCoordinator implements PlanCoordinator {
                 .filter(planManager -> !planManager.getPlan().isInterrupted())
                 .flatMap(planManager -> planManager.getDirtyAssets().stream())
                 .collect(Collectors.toList()));
-
-        logger.info("Initial dirtied assets: {}", dirtiedAssets);
+        if (!dirtiedAssets.isEmpty()) {
+            logger.info("Initial dirtied assets: {}", dirtiedAssets);
+        }
 
         List<Step> candidates = new LinkedList<>();
         for (final PlanManager planManager : getPlanManagers()) {
@@ -55,14 +56,18 @@ public class DefaultPlanCoordinator implements PlanCoordinator {
             try {
                 Collection<PodInstanceRequirement> relevantDirtyAssets =
                         getRelevantDirtyAssets(planManager, dirtiedAssets);
-                logger.info("Getting candidates for plan: '{}' with relevant dirtied assets: {}.",
-                        planManager.getPlan().getName(), relevantDirtyAssets);
+                if (!relevantDirtyAssets.isEmpty()) {
+                    logger.info("Getting candidates for plan: '{}' with relevant dirtied assets: {}.",
+                            planManager.getPlan().getName(), relevantDirtyAssets);
+                }
 
                 // Get candidate steps to be scheduled
                 Collection<? extends Step> steps = planManager.getCandidates(relevantDirtyAssets);
-                logger.info("Got candidates: {}, from plan: {}",
-                        steps.stream().map(step -> step.getName()).collect(Collectors.toList()),
-                        planManager.getPlan().getName());
+                if (!steps.isEmpty()) {
+                    logger.info("Got candidates: {}, from plan: {}",
+                            steps.stream().map(step -> step.getName()).collect(Collectors.toList()),
+                            planManager.getPlan().getName());
+                }
                 candidates.addAll(steps);
 
                 // Collect dirtied assets
@@ -71,14 +76,18 @@ public class DefaultPlanCoordinator implements PlanCoordinator {
                         .filter(step -> step.getPodInstanceRequirement().isPresent())
                         .map(step -> step.getPodInstanceRequirement().get())
                         .collect(Collectors.toList()));
-                logger.info("Updated dirtied assets: {}", dirtiedAssets);
+                if (!dirtiedAssets.isEmpty()) {
+                    logger.info("Updated dirtied assets: {}", dirtiedAssets);
+                }
             } catch (Throwable t) {
                 logger.error(String.format("Error with plan manager: %s.", planManager), t);
             }
         }
 
-        logger.info("Got total candidates: {}",
-                candidates.stream().map(step -> step.getName()).collect(Collectors.toList()));
+        if (!candidates.isEmpty()) {
+            logger.info("Got total candidates: {}",
+                    candidates.stream().map(step -> step.getName()).collect(Collectors.toList()));
+        }
         return candidates;
     }
 
@@ -90,8 +99,11 @@ public class DefaultPlanCoordinator implements PlanCoordinator {
     private Collection<PodInstanceRequirement> getRelevantDirtyAssets(
             PlanManager planManager,
             Set<PodInstanceRequirement> dirtyAssets) {
-        logger.info("Input dirty assets: {}", dirtyAssets);
-        logger.info("Plan's dirty assets: {}", planManager.getDirtyAssets());
+        Set<PodInstanceRequirement> planDirtyAssets = planManager.getDirtyAssets();
+        if (!dirtyAssets.isEmpty() || !planDirtyAssets.isEmpty()) {
+            logger.info("Input dirty assets: {}, {} Plan's dirty assets: {}",
+                    dirtyAssets, planManager.getPlan().getName(), planDirtyAssets);
+        }
 
         Plan plan = planManager.getPlan();
         return dirtyAssets.stream()

@@ -18,7 +18,6 @@ import org.slf4j.Logger;
 
 import com.codahale.metrics.Timer;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.protobuf.TextFormat;
 import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.offer.DestroyOfferRecommendation;
 import com.mesosphere.sdk.offer.LoggingUtils;
@@ -327,11 +326,9 @@ class OfferProcessor {
             for (Protos.Resource resource : offerResources.getResources()) {
                 if (resource.hasDisk() && resource.getDisk().hasPersistence()) {
                     // Permanent volume to be DESTROYed (and also UNRESERVEd)
-                    LOGGER.info("Volume to be destroyed: {}", TextFormat.shortDebugString(resource));
                     destroyRecommendations.add(new DestroyOfferRecommendation(offerResources.getOffer(), resource));
                 }
                 // Reserved resource OR permanent volume to be UNRESERVEd
-                LOGGER.info("Resource to be unreserved: {}", TextFormat.shortDebugString(resource));
                 unreserveRecommendations.add(new UnreserveOfferRecommendation(offerResources.getOffer(), resource));
             }
         }

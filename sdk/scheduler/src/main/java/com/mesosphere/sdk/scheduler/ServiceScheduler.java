@@ -40,7 +40,7 @@ public abstract class ServiceScheduler implements MesosEventClient {
      * Creates a new AbstractScheduler given a {@link StateStore}.
      */
     protected ServiceScheduler(String serviceName, StateStore stateStore, Optional<PlanCustomizer> planCustomizer) {
-        this.logger = LoggingUtils.getLogger(getClass(), serviceName);
+        this.logger = LoggingUtils.getLogger(ServiceScheduler.class, serviceName);
         this.serviceName = serviceName;
         this.stateStore = stateStore;
         this.planCustomizer = planCustomizer;
@@ -121,16 +121,17 @@ public abstract class ServiceScheduler implements MesosEventClient {
         // Revive previously suspended offers, if necessary
         Collection<Step> activeWorkSet = new HashSet<>(steps);
         Collection<Step> inProgressSteps = getInProgressSteps(getPlanCoordinator());
-        logger.info("InProgress Steps: {}",
-                inProgressSteps.stream()
-                        .map(step -> step.getMessage())
-                        .collect(Collectors.toList()));
+        if (!inProgressSteps.isEmpty()) {
+            logger.info("Steps in progress: {}",
+                    inProgressSteps.stream().map(step -> step.getMessage()).collect(Collectors.toList()));
+        }
         activeWorkSet.addAll(inProgressSteps);
         reviveManager.revive(activeWorkSet);
 
-        logger.info("Processing {} offer{} against {} step{}:",
+        logger.info("Processing {} offer{} against {} step{}{}",
                 offers.size(), offers.size() == 1 ? "" : "s",
-                steps.size(), steps.size() == 1 ? "" : "s");
+                steps.size(), steps.size() == 1 ? "" : "s",
+                offers.isEmpty() ? "" : ":");
         int i = 0;
         for (Protos.Offer offer : offers) {
             logger.info("  {}: {}", ++i, TextFormat.shortDebugString(offer));

@@ -134,7 +134,9 @@ public class DefaultRecoveryPlanManager implements PlanManager {
     }
 
     protected void updatePlan(Collection<PodInstanceRequirement> dirtyAssets) {
-        logger.info("Dirty assets for recovery plan consideration: {}", dirtyAssets);
+        if (!dirtyAssets.isEmpty()) {
+            logger.info("Dirty assets for recovery plan consideration: {}", dirtyAssets);
+        }
 
         synchronized (planLock) {
             Collection<PodInstanceRequirement> newRequirements = null;
@@ -268,7 +270,9 @@ public class DefaultRecoveryPlanManager implements PlanManager {
                 stateStore,
                 configStore,
                 recoverableTaskNames);
-        logger.info("Found tasks needing recovery: {}", getTaskNames(failedTasks));
+        if (!failedTasks.isEmpty()) {
+            logger.info("Tasks needing recovery: {}", getTaskNames(failedTasks));
+        }
 
         List<Protos.TaskInfo> allLaunchedTasks = stateStore.fetchTasks().stream()
                 .filter(taskInfo -> stateStore.fetchStatus(taskInfo.getName()).isPresent())
@@ -284,7 +288,9 @@ public class DefaultRecoveryPlanManager implements PlanManager {
         failedPods = failedPods.stream()
                 .filter(pod -> !PlanUtils.assetConflicts(pod, dirtyAssets))
                 .collect(Collectors.toList());
-        logger.info("Found pods needing recovery: {}", getPodNames(failedPods));
+        if (!failedPods.isEmpty()) {
+            logger.info("Found pods needing recovery: {}", getPodNames(failedPods));
+        }
 
         List<PodInstanceRequirement> inProgressRecoveries = getPlan().getChildren().stream()
                 .flatMap(phase -> phase.getChildren().stream())
@@ -294,12 +300,16 @@ public class DefaultRecoveryPlanManager implements PlanManager {
                 .map(requirement -> requirement.get())
                 .filter(requirement -> !failureStateHasChanged(requirement))
                 .collect(Collectors.toList());
-        logger.info("Found recoveries already in progress: {}", getPodNames(inProgressRecoveries));
+        if (!inProgressRecoveries.isEmpty()) {
+            logger.info("Found recoveries already in progress: {}", getPodNames(inProgressRecoveries));
+        }
 
         failedPods = failedPods.stream()
                 .filter(pod -> !PlanUtils.assetConflicts(pod, inProgressRecoveries))
                 .collect(Collectors.toList());
-        logger.info("New pods needing recovery: {}", getPodNames(failedPods));
+        if (!failedPods.isEmpty()) {
+            logger.info("New pods needing recovery: {}", getPodNames(failedPods));
+        }
 
         List<PodInstanceRequirement> recoveryRequirements = new ArrayList<>();
         for (PodInstanceRequirement failedPod : failedPods) {

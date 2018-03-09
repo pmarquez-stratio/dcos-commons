@@ -25,7 +25,7 @@ public class OfferAccepter {
 
     public void accept(List<OfferRecommendation> allRecommendations) {
         if (CollectionUtils.isEmpty(allRecommendations)) {
-            logger.warn("No recommendations, nothing to do");
+            logger.info("No recommendations, nothing to do");
             return;
         }
 
