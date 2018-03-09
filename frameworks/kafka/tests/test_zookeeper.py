@@ -40,7 +40,8 @@ def zookeeper_server(configure_security):
             timeout_seconds=30 * 60,
             insert_strict_options=False)
 
-        yield
+        yield {**service_kerberos_options, **{"package_name": config.ZOOKEEPER_PACKAGE_NAME}}
+
     finally:
         sdk_install.uninstall(config.ZOOKEEPER_PACKAGE_NAME, config.ZOOKEEPER_SERVICE_NAME)
         if sdk_utils.is_strict_mode():
