@@ -10,13 +10,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.mesosphere.sdk.curator.CuratorUtils;
+import com.mesosphere.sdk.framework.FrameworkConfig;
 import com.mesosphere.sdk.http.types.EndpointProducer;
 import com.mesosphere.sdk.kafka.api.BrokerResource;
 import com.mesosphere.sdk.kafka.api.KafkaZKClient;
 import com.mesosphere.sdk.kafka.api.TopicResource;
 import com.mesosphere.sdk.kafka.cmd.CmdExecutor;
 import com.mesosphere.sdk.scheduler.DefaultScheduler;
-import com.mesosphere.sdk.scheduler.FrameworkConfig;
 import com.mesosphere.sdk.scheduler.SchedulerBuilder;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.scheduler.SchedulerRunner;

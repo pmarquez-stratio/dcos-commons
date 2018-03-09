@@ -1,4 +1,4 @@
-package com.mesosphere.sdk.scheduler;
+package com.mesosphere.sdk.framework;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -15,7 +15,11 @@ import org.mockito.MockitoAnnotations;
 
 import com.mesosphere.sdk.dcos.Capabilities;
 import com.mesosphere.sdk.dcos.DcosConstants;
+import com.mesosphere.sdk.framework.FrameworkConfig;
+import com.mesosphere.sdk.framework.FrameworkRunner;
 import com.mesosphere.sdk.offer.Constants;
+import com.mesosphere.sdk.scheduler.EnvStore;
+import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.scheduler.plan.Status;
 import com.mesosphere.sdk.testutils.TestConstants;
 

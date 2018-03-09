@@ -2,14 +2,14 @@ package com.mesosphere.sdk.testing;
 
 import com.mesosphere.sdk.config.validate.ConfigValidator;
 import com.mesosphere.sdk.dcos.Capabilities;
+import com.mesosphere.sdk.framework.FrameworkScheduler;
+import com.mesosphere.sdk.framework.ReviveManager;
+import com.mesosphere.sdk.framework.TaskKiller;
 import com.mesosphere.sdk.offer.LoggingUtils;
 import com.mesosphere.sdk.offer.evaluate.PodInfoBuilder;
 import com.mesosphere.sdk.scheduler.DefaultScheduler;
-import com.mesosphere.sdk.scheduler.FrameworkScheduler;
-import com.mesosphere.sdk.scheduler.ReviveManager;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
-import com.mesosphere.sdk.scheduler.ServiceScheduler;
-import com.mesosphere.sdk.scheduler.TaskKiller;
+import com.mesosphere.sdk.scheduler.AbstractScheduler;
 import com.mesosphere.sdk.scheduler.plan.DefaultPodInstance;
 import com.mesosphere.sdk.scheduler.recovery.RecoveryPlanOverriderFactory;
 import com.mesosphere.sdk.specification.*;
@@ -320,13 +320,13 @@ public class ServiceTestRunner {
                 rawServiceSpec, mockSchedulerConfig, schedulerEnvironment, configTemplateDir).build();
 
         // Test 3: Does the scheduler build?
-        ServiceScheduler serviceScheduler = DefaultScheduler.newBuilder(serviceSpec, mockSchedulerConfig, persister)
+        AbstractScheduler serviceScheduler = DefaultScheduler.newBuilder(serviceSpec, mockSchedulerConfig, persister)
                 .setPlansFrom(rawServiceSpec)
                 .setRecoveryManagerFactory(recoveryManagerFactory)
                 .setCustomConfigValidators(validators)
                 .build();
         FrameworkScheduler frameworkScheduler =
-                new FrameworkScheduler(persister, serviceScheduler)
+                new FrameworkScheduler(mockSchedulerConfig, persister, serviceScheduler)
                 .setReadyToAcceptOffers()
                 .disableThreading();
 

@@ -1,4 +1,4 @@
-package com.mesosphere.sdk.scheduler;
+package com.mesosphere.sdk.framework;
 
 import java.util.Arrays;
 import java.util.List;
@@ -11,9 +11,14 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+
+import com.mesosphere.sdk.framework.Driver;
+import com.mesosphere.sdk.framework.FrameworkScheduler;
+import com.mesosphere.sdk.framework.OfferProcessor;
 import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.offer.evaluate.EvaluationOutcome;
 import com.mesosphere.sdk.offer.evaluate.placement.IsLocalRegionRule;
+import com.mesosphere.sdk.scheduler.MesosEventClient;
 import com.mesosphere.sdk.scheduler.MesosEventClient.StatusResponse;
 import com.mesosphere.sdk.state.FrameworkStore;
 import com.mesosphere.sdk.storage.PersisterException;
@@ -36,6 +41,7 @@ public class FrameworkSchedulerTest {
     @Mock private FrameworkStore mockFrameworkStore;
     @Mock private MesosEventClient mockMesosEventClient;
     @Mock private OfferProcessor mockOfferProcessor;
+    @Mock private ImplicitReconciler mockImplicitReconciler;
     @Mock private SchedulerDriver mockSchedulerDriver;
     @Mock private SchedulerDriver mockSchedulerDriver2;
 
@@ -44,7 +50,8 @@ public class FrameworkSchedulerTest {
     @Before
     public void beforeEach() {
         MockitoAnnotations.initMocks(this);
-        scheduler = new FrameworkScheduler(mockFrameworkStore, mockMesosEventClient, mockOfferProcessor)
+        scheduler = new FrameworkScheduler(
+                mockFrameworkStore, mockMesosEventClient, mockOfferProcessor, mockImplicitReconciler)
                 .disableThreading();
     }
 

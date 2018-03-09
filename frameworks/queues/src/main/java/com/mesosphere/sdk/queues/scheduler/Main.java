@@ -1,9 +1,9 @@
 package com.mesosphere.sdk.queues.scheduler;
 
+import com.mesosphere.sdk.framework.FrameworkConfig;
 import com.mesosphere.sdk.queues.http.endpoints.QueueArtifactResource;
 import com.mesosphere.sdk.scheduler.DefaultScheduler;
 import com.mesosphere.sdk.scheduler.EnvStore;
-import com.mesosphere.sdk.scheduler.FrameworkConfig;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.specification.DefaultServiceSpec;
 import com.mesosphere.sdk.specification.ServiceSpec;

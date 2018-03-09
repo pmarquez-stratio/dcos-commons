@@ -1,4 +1,4 @@
-package com.mesosphere.sdk.scheduler;
+package com.mesosphere.sdk.framework;
 
 import org.slf4j.Logger;
 
@@ -103,10 +103,10 @@ public class TokenBucket {
     }
 
     /**
-     * Resets internal counters for tests
+     * Resets internal counters for tests.
      */
     @VisibleForTesting
-    synchronized void reset() {
+    public synchronized void reset() {
         count = initial;
         lastAcquireMs = 0;
     }

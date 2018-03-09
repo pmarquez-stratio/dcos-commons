@@ -8,6 +8,7 @@ import com.mesosphere.sdk.config.validate.ConfigValidator;
 import com.mesosphere.sdk.config.validate.DefaultConfigValidators;
 import com.mesosphere.sdk.curator.CuratorPersister;
 import com.mesosphere.sdk.dcos.Capabilities;
+import com.mesosphere.sdk.framework.ExitCode;
 import com.mesosphere.sdk.http.endpoints.ArtifactResource;
 import com.mesosphere.sdk.http.queries.ArtifactQueries;
 import com.mesosphere.sdk.http.types.EndpointProducer;
@@ -196,7 +197,7 @@ public class SchedulerBuilder {
      * @return a new Mesos scheduler instance to be registered, or an empty {@link Optional}
      * @throws IllegalArgumentException if validating the provided configuration failed
      */
-    public ServiceScheduler build() {
+    public AbstractScheduler build() {
         // NOTE: we specifically avoid accessing the provided persister before build() is called.
         // This is to ensure that upstream has a chance to e.g. lock it via CuratorLocker.
 
@@ -228,7 +229,7 @@ public class SchedulerBuilder {
                 // because the service is likely now in an inconsistent state resulting from the incomplete uninstall.
                 logger.error("Service has been previously told to uninstall, this cannot be reversed. " +
                         "Reenable the uninstall flag to complete the process.");
-                SchedulerUtils.hardExit(SchedulerErrorCode.SCHEDULER_ALREADY_UNINSTALLING);
+                SchedulerUtils.hardExit(ExitCode.SCHEDULER_ALREADY_UNINSTALLING);
             }
         }
 
@@ -236,7 +237,7 @@ public class SchedulerBuilder {
             return getDefaultScheduler(new FrameworkStore(persister), stateStore, configStore);
         } catch (ConfigStoreException e) {
             logger.error("Failed to construct scheduler.", e);
-            SchedulerUtils.hardExit(SchedulerErrorCode.INITIALIZATION_FAILURE);
+            SchedulerUtils.hardExit(ExitCode.INITIALIZATION_FAILURE);
             return null; // This is so the compiler doesn't complain.  The scheduler is going down anyway.
         }
     }

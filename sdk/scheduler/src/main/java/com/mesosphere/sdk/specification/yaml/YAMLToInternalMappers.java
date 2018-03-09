@@ -2,6 +2,8 @@ package com.mesosphere.sdk.specification.yaml;
 
 import com.google.common.base.Strings;
 import com.mesosphere.sdk.dcos.DcosConstants;
+import com.mesosphere.sdk.framework.FrameworkConfig;
+
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -12,7 +14,6 @@ import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.offer.evaluate.placement.MarathonConstraintParser;
 import com.mesosphere.sdk.offer.evaluate.placement.PassthroughRule;
 import com.mesosphere.sdk.offer.evaluate.placement.PlacementRule;
-import com.mesosphere.sdk.scheduler.FrameworkConfig;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.specification.*;
 import org.apache.mesos.Protos;

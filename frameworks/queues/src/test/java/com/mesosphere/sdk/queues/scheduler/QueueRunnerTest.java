@@ -11,7 +11,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import com.mesosphere.sdk.curator.CuratorLocker;
-import com.mesosphere.sdk.scheduler.FrameworkConfig;
+import com.mesosphere.sdk.framework.FrameworkConfig;
 import com.mesosphere.sdk.scheduler.MesosEventClient;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.storage.MemPersister;

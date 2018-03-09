@@ -1,4 +1,4 @@
-package com.mesosphere.sdk.scheduler;
+package com.mesosphere.sdk.framework;
 
 import org.apache.http.HttpHost;
 import org.apache.http.HttpResponse;
@@ -7,6 +7,10 @@ import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.message.BasicHttpRequest;
 import org.junit.Assert;
 import org.junit.Test;
+
+import com.mesosphere.sdk.framework.ApiServer;
+import com.mesosphere.sdk.scheduler.SchedulerConfig;
+
 import java.net.URI;
 import java.time.Duration;
 import java.util.Arrays;
@@ -22,7 +26,7 @@ import javax.ws.rs.core.Response;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-public class SchedulerApiServerTest {
+public class ApiServerTest {
     private static final int SHORT_TIMEOUT_MILLIS = 100;
     private static final int LONG_TIMEOUT_MILLIS = 30000;
 
@@ -33,7 +37,7 @@ public class SchedulerApiServerTest {
         when(mockSchedulerConfig.getApiServerPort()).thenReturn(0);
 
         Listener listener = new Listener();
-        SchedulerApiServer server = SchedulerApiServer.start(
+        ApiServer server = ApiServer.start(
                 mockSchedulerConfig,
                 Arrays.asList(
                         new TestResourcePlans(),

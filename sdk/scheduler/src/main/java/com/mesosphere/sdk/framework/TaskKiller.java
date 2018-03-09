@@ -1,4 +1,4 @@
-package com.mesosphere.sdk.scheduler;
+package com.mesosphere.sdk.framework;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.mesosphere.sdk.offer.LoggingUtils;
@@ -18,9 +18,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
- * This class implements reliable task killing in conjunction with the {@link TaskCleaner}.  Mesos does not provide
- * reliable task killing.  This class repeatedly attempts to kill a task until Mesos declares it has been killed or that
- * Mesos doesn't know anything about this task.
+ * This class implements reliable task killing.  Mesos does not provide reliable task killing.  This class repeatedly
+ * attempts to kill a task until Mesos declares it has been killed or until Mesos doesn't know anything about this task.
  */
 public final class TaskKiller {
     private static final Logger LOGGER = LoggingUtils.getLogger(TaskKiller.class);

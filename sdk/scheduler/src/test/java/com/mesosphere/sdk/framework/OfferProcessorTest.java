@@ -1,4 +1,4 @@
-package com.mesosphere.sdk.scheduler;
+package com.mesosphere.sdk.framework;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -23,8 +23,11 @@ import org.mockito.stubbing.Answer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.mesosphere.sdk.framework.Driver;
+import com.mesosphere.sdk.framework.OfferProcessor;
 import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.offer.ReserveOfferRecommendation;
+import com.mesosphere.sdk.scheduler.MesosEventClient;
 import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
 import com.mesosphere.sdk.scheduler.MesosEventClient.UnexpectedResourcesResponse;
 import com.mesosphere.sdk.storage.Persister;

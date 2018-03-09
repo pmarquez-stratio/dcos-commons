@@ -2,19 +2,19 @@ package com.mesosphere.sdk.queues.scheduler;
 
 import com.mesosphere.sdk.curator.CuratorLocker;
 import com.mesosphere.sdk.curator.CuratorPersister;
-import com.mesosphere.sdk.scheduler.FrameworkConfig;
-import com.mesosphere.sdk.scheduler.FrameworkRunner;
+import com.mesosphere.sdk.framework.FrameworkConfig;
+import com.mesosphere.sdk.framework.FrameworkRunner;
 import com.mesosphere.sdk.scheduler.MesosEventClient;
 import com.mesosphere.sdk.scheduler.Metrics;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
-import com.mesosphere.sdk.scheduler.ServiceScheduler;
+import com.mesosphere.sdk.scheduler.AbstractScheduler;
 import com.mesosphere.sdk.state.SchemaVersionStore;
 import com.mesosphere.sdk.storage.Persister;
 import com.mesosphere.sdk.storage.PersisterCache;
 import com.mesosphere.sdk.storage.PersisterException;
 
 /**
- * Sets up and executes a {@link FrameworkRunner} to which potentially multiple {@link ServiceScheduler}s may be added.
+ * Sets up and executes a {@link FrameworkRunner} to which potentially multiple {@link AbstractScheduler}s may be added.
  *
  * <p>WARNING: This is not a stable API, and can go away at any time.
  */

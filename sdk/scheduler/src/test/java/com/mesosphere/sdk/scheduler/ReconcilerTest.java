@@ -1,9 +1,11 @@
-package com.mesosphere.sdk.reconciliation;
+package com.mesosphere.sdk.scheduler;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
-import com.mesosphere.sdk.scheduler.Driver;
+import com.mesosphere.sdk.framework.Driver;
+import com.mesosphere.sdk.scheduler.Reconciler;
+
 import org.apache.mesos.Protos;
 import org.apache.mesos.SchedulerDriver;
 import com.mesosphere.sdk.state.StateStore;
@@ -227,7 +229,7 @@ public class ReconcilerTest {
         private long nowMs;
 
         private TestReconciler(StateStore store, long nowMs) {
-            super(store);
+            super("foo", store);
             setNowMs(nowMs);
         }
 

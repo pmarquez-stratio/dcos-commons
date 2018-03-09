@@ -3,7 +3,7 @@ package com.mesosphere.sdk.offer;
 import org.apache.mesos.Protos;
 import org.apache.mesos.SchedulerDriver;
 
-import com.mesosphere.sdk.scheduler.Driver;
+import com.mesosphere.sdk.framework.Driver;
 import com.mesosphere.sdk.testutils.ResourceTestUtils;
 import org.junit.Assert;
 import org.junit.Before;

@@ -2,6 +2,8 @@ package com.mesosphere.sdk.scheduler;
 
 import com.mesosphere.sdk.config.validate.PodSpecsCannotUseUnsupportedFeatures;
 import com.mesosphere.sdk.curator.CuratorLocker;
+import com.mesosphere.sdk.framework.FrameworkConfig;
+import com.mesosphere.sdk.framework.FrameworkRunner;
 import com.mesosphere.sdk.specification.DefaultServiceSpec;
 import com.mesosphere.sdk.specification.ServiceSpec;
 import com.mesosphere.sdk.specification.yaml.RawServiceSpec;
@@ -11,7 +13,7 @@ import com.mesosphere.sdk.storage.PersisterException;
 import java.io.File;
 
 /**
- * Sets up and executes the {@link ServiceScheduler} instance.
+ * Sets up and executes the {@link AbstractScheduler} instance.
  */
 public class SchedulerRunner implements Runnable {
 
@@ -89,7 +91,7 @@ public class SchedulerRunner implements Runnable {
                 FrameworkConfig.fromServiceSpec(serviceSpec),
                 PodSpecsCannotUseUnsupportedFeatures.serviceRequestsGpuResources(serviceSpec));
 
-        ServiceScheduler scheduler = schedulerBuilder.build();
+        AbstractScheduler scheduler = schedulerBuilder.build();
         scheduler.start();
         frameworkRunner.registerAndRunFramework(persister, scheduler);
     }

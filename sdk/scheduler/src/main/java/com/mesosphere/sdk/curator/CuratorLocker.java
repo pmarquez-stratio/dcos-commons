@@ -9,7 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.mesosphere.sdk.scheduler.SchedulerErrorCode;
+import com.mesosphere.sdk.framework.ExitCode;
 import com.mesosphere.sdk.scheduler.SchedulerUtils;
 import com.mesosphere.sdk.storage.PersisterUtils;
 
@@ -161,6 +161,6 @@ public class CuratorLocker {
      */
     @VisibleForTesting
     protected void exit() {
-        SchedulerUtils.hardExit(SchedulerErrorCode.LOCK_UNAVAILABLE);
+        SchedulerUtils.hardExit(ExitCode.LOCK_UNAVAILABLE);
     }
 }

@@ -1,5 +1,6 @@
 package com.mesosphere.sdk.scheduler;
 
+import com.mesosphere.sdk.framework.ExitCode;
 import com.mesosphere.sdk.storage.PersisterUtils;
 
 /**
@@ -46,7 +47,7 @@ public class SchedulerUtils {
      * Immediately exits the process with the ordinal value of the provided {@code errorCode}.
      */
     @SuppressWarnings("DM_EXIT")
-    public static void hardExit(SchedulerErrorCode errorCode) {
+    public static void hardExit(ExitCode errorCode) {
         String message = String.format("Scheduler exiting immediately with code: %d", errorCode.getValue());
         System.err.println(message);
         System.out.println(message);

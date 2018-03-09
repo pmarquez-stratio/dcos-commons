@@ -115,9 +115,17 @@ public class SchedulerConfig {
     private static final String MESOS_API_VERSION_ENV = "MESOS_API_VERSION";
 
     /**
-     * Environment variables for configuring goal state override behavior.
+     * Environment variable for manually configuring the command to run when pausing a pod.
      */
     private static final String PAUSE_OVERRIDE_CMD_ENV = "PAUSE_OVERRIDE_CMD";
+
+    /**
+     * Environment variables for configuring implicit reconciliation:
+     * <ul><li>Delay before first implicit reconciliation is triggered (in milliseconds)</li>
+     * <li>Duration between implicit reconciliations (in milliseconds)</li></ul>
+     */
+    private static final String IMPLICIT_RECONCILIATION_DELAY_MS_ENV = "IMPLICIT_RECONCILIATION_DELAY_MS";
+    private static final String IMPLICIT_RECONCILIATION_PERIOD_MS_ENV = "IMPLICIT_RECONCILIATION_PERIOD_MS";
 
     /**
      * Environment variable for allowing region awareness.
@@ -322,7 +330,24 @@ public class SchedulerConfig {
         return envStore.getOptional(PAUSE_OVERRIDE_CMD_ENV, GoalStateOverride.PAUSE_COMMAND);
     }
 
+    /**
+     * Returns the duration to wait before performing the first implicit reconcilation, in milliseconds.
+     */
+    public long getImplicitReconcileDelayMs() {
+        return envStore.getOptionalLong(IMPLICIT_RECONCILIATION_DELAY_MS_ENV, 0 /* no delay */);
+    }
+
+    /**
+     * Returns the duration to wait between implicit reconcilations, in milliseconds.
+     */
+    public long getImplicitReconcilePeriodMs() {
+        return envStore.getOptionalLong(IMPLICIT_RECONCILIATION_PERIOD_MS_ENV, 60 * 60 * 1000 /* 1 hour */);
+    }
+
+    /**
+     * Returns whether region awareness should be enabled. In 1.11, this is an explicit opt-in by users.
+     */
     public boolean isRegionAwarenessEnabled() {
-        return Boolean.valueOf(envStore.getOptional(ALLOW_REGION_AWARENESS_ENV, "false"));
+        return envStore.getOptionalBoolean(ALLOW_REGION_AWARENESS_ENV, false);
     }
 }

@@ -1,4 +1,4 @@
-package com.mesosphere.sdk.scheduler;
+package com.mesosphere.sdk.framework;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -9,6 +9,8 @@ import org.apache.commons.lang3.StringUtils;
 import com.google.common.collect.ImmutableList;
 import com.mesosphere.sdk.dcos.DcosConstants;
 import com.mesosphere.sdk.offer.Constants;
+import com.mesosphere.sdk.scheduler.EnvStore;
+import com.mesosphere.sdk.scheduler.SchedulerUtils;
 import com.mesosphere.sdk.specification.ServiceSpec;
 import com.mesosphere.sdk.specification.yaml.RawServiceSpec;
 
@@ -77,7 +79,7 @@ public class FrameworkConfig {
     /**
      * Creates a {@link FrameworkConfig} instance based off the contents of the provided {@link ServiceSpec}.
      */
-    static FrameworkConfig fromServiceSpec(ServiceSpec serviceSpec) {
+    public static FrameworkConfig fromServiceSpec(ServiceSpec serviceSpec) {
         return new FrameworkConfig(
                 serviceSpec.getName(),
                 serviceSpec.getRole(),

@@ -14,6 +14,7 @@ import org.apache.mesos.Protos.Offer;
 import org.apache.mesos.SchedulerDriver;
 
 import com.mesosphere.sdk.dcos.clients.SecretsClient;
+import com.mesosphere.sdk.framework.Driver;
 import com.mesosphere.sdk.scheduler.plan.PlanCoordinator;
 import com.mesosphere.sdk.scheduler.plan.Step;
 import com.mesosphere.sdk.specification.ServiceSpec;
@@ -26,7 +27,7 @@ import com.mesosphere.sdk.storage.PersisterException;
 import com.mesosphere.sdk.testutils.TestConstants;
 
 /**
- * Tests for {@link ServiceScheduler}.
+ * Tests for {@link AbstractScheduler}.
  */
 public class ServiceSchedulerTest {
 
@@ -52,7 +53,7 @@ public class ServiceSchedulerTest {
         stateStore.storeTasks(Collections.singleton(TestConstants.TASK_INFO));
         stateStore.storeStatus(TestConstants.TASK_NAME, TestConstants.TASK_STATUS);
 
-        ServiceScheduler scheduler = getScheduler();
+        AbstractScheduler scheduler = getScheduler();
 
         // Not reconciled yet:
         Assert.assertEquals(MesosEventClient.OfferResponse.Result.NOT_READY,
@@ -86,7 +87,7 @@ public class ServiceSchedulerTest {
         return scheduler;
     }
 
-    private class TestScheduler extends ServiceScheduler {
+    private class TestScheduler extends AbstractScheduler {
 
         protected TestScheduler(StateStore stateStore) {
             super("test-svc",  stateStore, Optional.empty());

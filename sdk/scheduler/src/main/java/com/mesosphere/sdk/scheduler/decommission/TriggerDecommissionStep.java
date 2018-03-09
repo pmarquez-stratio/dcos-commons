@@ -1,6 +1,6 @@
 package com.mesosphere.sdk.scheduler.decommission;
 
-import com.mesosphere.sdk.scheduler.TaskKiller;
+import com.mesosphere.sdk.framework.TaskKiller;
 import com.mesosphere.sdk.scheduler.plan.PodInstanceRequirement;
 import com.mesosphere.sdk.scheduler.plan.Status;
 import com.mesosphere.sdk.scheduler.uninstall.UninstallStep;

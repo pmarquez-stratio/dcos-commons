@@ -3,6 +3,7 @@ package com.mesosphere.sdk.scheduler;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.TextFormat;
 import com.mesosphere.sdk.dcos.Capabilities;
+import com.mesosphere.sdk.framework.TaskKiller;
 import com.mesosphere.sdk.http.endpoints.*;
 import com.mesosphere.sdk.http.queries.ArtifactQueries;
 import com.mesosphere.sdk.http.types.EndpointProducer;
@@ -30,7 +31,7 @@ import java.util.stream.Collectors;
  * when possible.  Changes to the ServiceSpec will result in rolling configuration updates, or the creation of
  * new Tasks where applicable.
  */
-public class DefaultScheduler extends ServiceScheduler {
+public class DefaultScheduler extends AbstractScheduler {
 
     private final Logger logger;
     private final SchedulerConfig schedulerConfig;

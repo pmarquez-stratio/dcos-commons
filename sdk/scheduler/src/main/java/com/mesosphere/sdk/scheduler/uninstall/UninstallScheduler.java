@@ -7,7 +7,7 @@ import com.mesosphere.sdk.http.endpoints.HealthResource;
 import com.mesosphere.sdk.http.endpoints.PlansResource;
 import com.mesosphere.sdk.http.types.PlanInfo;
 import com.mesosphere.sdk.offer.*;
-import com.mesosphere.sdk.scheduler.ServiceScheduler;
+import com.mesosphere.sdk.scheduler.AbstractScheduler;
 import com.mesosphere.sdk.scheduler.OfferResources;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.scheduler.plan.*;
@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 /**
  * This scheduler uninstalls a service and releases all of its resources.
  */
-public class UninstallScheduler extends ServiceScheduler {
+public class UninstallScheduler extends AbstractScheduler {
     private final Logger logger;
     private final ConfigStore<ServiceSpec> configStore;
     private final UninstallRecorder recorder;

@@ -10,7 +10,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.mesosphere.sdk.queues.http.types.QueueInfoProvider;
-import com.mesosphere.sdk.scheduler.ServiceScheduler;
+import com.mesosphere.sdk.scheduler.AbstractScheduler;
 import com.mesosphere.sdk.scheduler.plan.PlanCoordinator;
 import com.mesosphere.sdk.specification.ServiceSpec;
 import com.mesosphere.sdk.state.ConfigStore;
@@ -28,14 +28,14 @@ public class DefaultQueueInfoProvider implements QueueInfoProvider {
     private final Lock rlock = internalLock.readLock();
     private final Lock rwlock = internalLock.writeLock();
 
-    private final Map<String, ServiceScheduler> runs = new HashMap<>();
+    private final Map<String, AbstractScheduler> runs = new HashMap<>();
 
     /**
      * Returns the {@link StateStore} for the specified run, or an empty {@link Optional} if the run was not found.
      */
     @Override
     public Optional<StateStore> getStateStore(String runName) {
-        ServiceScheduler scheduler = getRun(runName);
+        AbstractScheduler scheduler = getRun(runName);
         return scheduler == null ? Optional.empty() : Optional.of(scheduler.getStateStore());
     }
 
@@ -44,7 +44,7 @@ public class DefaultQueueInfoProvider implements QueueInfoProvider {
      */
     @Override
     public Optional<ConfigStore<ServiceSpec>> getConfigStore(String runName) {
-        ServiceScheduler scheduler = getRun(runName);
+        AbstractScheduler scheduler = getRun(runName);
         return scheduler == null ? Optional.empty() : Optional.of(scheduler.getConfigStore());
     }
 
@@ -53,7 +53,7 @@ public class DefaultQueueInfoProvider implements QueueInfoProvider {
      */
     @Override
     public Optional<PlanCoordinator> getPlanCoordinator(String runName) {
-        ServiceScheduler scheduler = getRun(runName);
+        AbstractScheduler scheduler = getRun(runName);
         return scheduler == null ? Optional.empty() : Optional.of(scheduler.getPlanCoordinator());
     }
 
@@ -75,7 +75,7 @@ public class DefaultQueueInfoProvider implements QueueInfoProvider {
     /**
      * Returns the specified run, or {@code null} if it's not found.
      */
-    public ServiceScheduler getRun(String runName) {
+    public AbstractScheduler getRun(String runName) {
         lockAllR();
         try {
             return runs.get(runName);
@@ -87,7 +87,7 @@ public class DefaultQueueInfoProvider implements QueueInfoProvider {
     /**
      * Sets a shared read lock and returns the run values. {@link #unlockR()} must be called afterwards.
      */
-    public Collection<ServiceScheduler> lockAllR() {
+    public Collection<AbstractScheduler> lockAllR() {
         rlock.lock();
         return runs.values();
     }
@@ -102,7 +102,7 @@ public class DefaultQueueInfoProvider implements QueueInfoProvider {
     /**
      * Sets an exclusive write lock and returns the full run map. {@link #unlockRW()} must be called afterwards.
      */
-    public Map<String, ServiceScheduler> lockRW() {
+    public Map<String, AbstractScheduler> lockRW() {
         rwlock.lock();
         return runs;
     }

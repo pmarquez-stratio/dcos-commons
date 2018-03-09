@@ -2,8 +2,8 @@ package com.mesosphere.sdk.scheduler;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.TextFormat;
+import com.mesosphere.sdk.framework.ReviveManager;
 import com.mesosphere.sdk.offer.LoggingUtils;
-import com.mesosphere.sdk.reconciliation.Reconciler;
 import com.mesosphere.sdk.scheduler.plan.*;
 import com.mesosphere.sdk.scheduler.uninstall.UninstallScheduler;
 import com.mesosphere.sdk.specification.ServiceSpec;
@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
 /**
  * Abstract main scheduler class that ties together the main pieces of a Service.
  */
-public abstract class ServiceScheduler implements MesosEventClient {
+public abstract class AbstractScheduler implements MesosEventClient {
 
     private final Logger logger;
 
@@ -39,8 +39,8 @@ public abstract class ServiceScheduler implements MesosEventClient {
     /**
      * Creates a new AbstractScheduler given a {@link StateStore}.
      */
-    protected ServiceScheduler(String serviceName, StateStore stateStore, Optional<PlanCustomizer> planCustomizer) {
-        this.logger = LoggingUtils.getLogger(ServiceScheduler.class, serviceName);
+    protected AbstractScheduler(String serviceName, StateStore stateStore, Optional<PlanCustomizer> planCustomizer) {
+        this.logger = LoggingUtils.getLogger(AbstractScheduler.class, serviceName);
         this.serviceName = serviceName;
         this.stateStore = stateStore;
         this.planCustomizer = planCustomizer;
@@ -60,7 +60,7 @@ public abstract class ServiceScheduler implements MesosEventClient {
      *
      * @return this
      */
-    public ServiceScheduler start() {
+    public AbstractScheduler start() {
         if (!started.compareAndSet(false, true)) {
             throw new IllegalStateException("start() can only be called once");
         }
@@ -96,10 +96,10 @@ public abstract class ServiceScheduler implements MesosEventClient {
     public void registered(boolean reRegistered) {
         if (!reRegistered) {
             this.reviveManager = new ReviveManager(serviceName);
-            this.reconciler = new Reconciler(stateStore);
+            this.reconciler = new Reconciler(serviceName, stateStore);
             registeredWithMesos();
         }
-        // Task reconciliation should be (re)started on all (re-)registrations.
+        // Explicit task reconciliation should be (re)started on all (re-)registrations.
         reconciler.start();
         reconciler.reconcile();
     }

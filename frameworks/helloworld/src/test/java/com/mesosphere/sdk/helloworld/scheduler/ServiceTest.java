@@ -50,7 +50,6 @@ public class ServiceTest {
         Collection<SimulationTick> ticks = new ArrayList<>();
 
         ticks.add(Send.register());
-
         ticks.add(Expect.reconciledImplicitly());
 
         // Verify that service launches 1 hello pod.
@@ -99,7 +98,6 @@ public class ServiceTest {
         Collection<SimulationTick> ticks = new ArrayList<>();
 
         ticks.add(Send.register());
-
         ticks.add(Expect.reconciledImplicitly());
 
         // Verify that service launches 1 hello pod.
@@ -149,7 +147,6 @@ public class ServiceTest {
         Collection<SimulationTick> ticks = new ArrayList<>();
 
         ticks.add(Send.register());
-
         ticks.add(Expect.reconciledImplicitly());
 
         // Verify that service launches 1 hello pod.
@@ -213,6 +210,7 @@ public class ServiceTest {
         Collection<SimulationTick> ticks = new ArrayList<>();
 
         ticks.add(Send.register());
+        ticks.add(Expect.reconciledImplicitly());
 
         ticks.add(Expect.reconciledExplicitly(result.getPersister()));
         ticks.add(Send.taskStatus("hello-0-server", Protos.TaskState.TASK_RUNNING).build());
@@ -221,7 +219,6 @@ public class ServiceTest {
 
         // Need to send an offer to trigger the implicit reconciliation
         ticks.add(Send.offerBuilder("hello").build());
-        ticks.add(Expect.reconciledImplicitly());
         ticks.add(Expect.declinedLastOffer());
 
         ticks.add(new Expect() {
@@ -259,7 +256,7 @@ public class ServiceTest {
     /**
      * Tests scheduler behavior when the number of {@code world} pods is reduced.
      */
-    private void testWorldDecommission(boolean useDefaultExecutor) throws Exception {
+    private static void testWorldDecommission(boolean useDefaultExecutor) throws Exception {
         // Simulate an initial deployment with default of 2 world nodes (and 1 hello node):
         ServiceTestResult result = runDefaultDeployment(useDefaultExecutor);
         Assert.assertEquals(
@@ -270,6 +267,7 @@ public class ServiceTest {
         Collection<SimulationTick> ticks = new ArrayList<>();
 
         ticks.add(Send.register());
+        ticks.add(Expect.reconciledImplicitly());
 
         ticks.add(Expect.reconciledExplicitly(result.getPersister()));
         ticks.add(Send.taskStatus("hello-0-server", Protos.TaskState.TASK_RUNNING).build());
@@ -290,7 +288,6 @@ public class ServiceTest {
 
         // Need to send an offer to trigger the implicit reconciliation.
         ticks.add(Send.offerBuilder("hello").build());
-        ticks.add(Expect.reconciledImplicitly());
         ticks.add(Expect.declinedLastOffer());
 
         // Check plan state after an offer came through: world-1-server killed
@@ -362,7 +359,6 @@ public class ServiceTest {
         Collection<SimulationTick> ticks = new ArrayList<>();
 
         ticks.add(Send.register());
-
         ticks.add(Expect.reconciledImplicitly());
 
         // Verify that service launches 1 hello pod then 2 world pods.
@@ -613,11 +609,10 @@ public class ServiceTest {
     /**
      * Runs a default hello world deployment and returns the persisted state that resulted.
      */
-    private ServiceTestResult runDefaultDeployment(boolean useDefaultExecutor) throws Exception {
+    private static ServiceTestResult runDefaultDeployment(boolean useDefaultExecutor) throws Exception {
         Collection<SimulationTick> ticks = new ArrayList<>();
 
         ticks.add(Send.register());
-
         ticks.add(Expect.reconciledImplicitly());
 
         // Verify that service launches 1 hello pod then 2 world pods.

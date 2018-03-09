@@ -1,4 +1,4 @@
-package com.mesosphere.sdk.scheduler;
+package com.mesosphere.sdk.framework;
 
 import java.util.List;
 import java.util.Optional;
@@ -12,6 +12,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.TextFormat;
 import com.mesosphere.sdk.offer.LoggingUtils;
 import com.mesosphere.sdk.offer.evaluate.placement.IsLocalRegionRule;
+import com.mesosphere.sdk.scheduler.MesosEventClient;
+import com.mesosphere.sdk.scheduler.Metrics;
+import com.mesosphere.sdk.scheduler.SchedulerConfig;
+import com.mesosphere.sdk.scheduler.SchedulerUtils;
 import com.mesosphere.sdk.scheduler.MesosEventClient.StatusResponse;
 import com.mesosphere.sdk.state.FrameworkStore;
 import com.mesosphere.sdk.state.StateStoreException;
@@ -40,17 +44,26 @@ public class FrameworkScheduler implements Scheduler {
     private final FrameworkStore frameworkStore;
     private final MesosEventClient mesosEventClient;
     private final OfferProcessor offerProcessor;
+    private final ImplicitReconciler implicitReconciler;
 
-    public FrameworkScheduler(Persister persister, MesosEventClient mesosEventClient) {
-        this(new FrameworkStore(persister), mesosEventClient, new OfferProcessor(mesosEventClient, persister));
+    public FrameworkScheduler(SchedulerConfig schedulerConfig, Persister persister, MesosEventClient mesosEventClient) {
+        this(
+                new FrameworkStore(persister),
+                mesosEventClient,
+                new OfferProcessor(mesosEventClient, persister),
+                new ImplicitReconciler(schedulerConfig));
     }
 
     @VisibleForTesting
     FrameworkScheduler(
-            FrameworkStore frameworkStore, MesosEventClient mesosEventClient, OfferProcessor offerProcessor) {
+            FrameworkStore frameworkStore,
+            MesosEventClient mesosEventClient,
+            OfferProcessor offerProcessor,
+            ImplicitReconciler implicitReconciler) {
         this.frameworkStore = frameworkStore;
         this.mesosEventClient = mesosEventClient;
         this.offerProcessor = offerProcessor;
+        this.implicitReconciler = implicitReconciler;
     }
 
     /**
@@ -82,6 +95,7 @@ public class FrameworkScheduler implements Scheduler {
     @VisibleForTesting
     public FrameworkScheduler disableThreading() {
         offerProcessor.disableThreading();
+        implicitReconciler.disableThreading();
         return this;
     }
 
@@ -100,13 +114,15 @@ public class FrameworkScheduler implements Scheduler {
         } catch (Exception e) {
             LOGGER.error(String.format(
                     "Unable to store registered framework ID '%s'", frameworkId.getValue()), e);
-            SchedulerUtils.hardExit(SchedulerErrorCode.REGISTRATION_FAILURE);
+            SchedulerUtils.hardExit(ExitCode.REGISTRATION_FAILURE);
         }
 
         updateDriverAndDomain(driver, masterInfo);
         mesosEventClient.registered(false);
 
+        // Start background threads:
         offerProcessor.start();
+        implicitReconciler.start();
     }
 
     @Override
@@ -168,7 +184,7 @@ public class FrameworkScheduler implements Scheduler {
     @Override
     public void disconnected(SchedulerDriver driver) {
         LOGGER.error("Disconnected from Master, shutting down.");
-        SchedulerUtils.hardExit(SchedulerErrorCode.DISCONNECTED);
+        SchedulerUtils.hardExit(ExitCode.DISCONNECTED);
     }
 
     @Override
@@ -185,7 +201,7 @@ public class FrameworkScheduler implements Scheduler {
     @Override
     public void error(SchedulerDriver driver, String message) {
         LOGGER.error("SchedulerDriver returned an error, shutting down: {}", message);
-        SchedulerUtils.hardExit(SchedulerErrorCode.ERROR);
+        SchedulerUtils.hardExit(ExitCode.ERROR);
     }
 
     private static void updateDriverAndDomain(SchedulerDriver driver, Protos.MasterInfo masterInfo) {

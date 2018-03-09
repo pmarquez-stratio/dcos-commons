@@ -1,4 +1,4 @@
-package com.mesosphere.sdk.scheduler;
+package com.mesosphere.sdk.framework;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.TextFormat;
@@ -7,6 +7,10 @@ import com.mesosphere.sdk.http.endpoints.HealthResource;
 import com.mesosphere.sdk.http.endpoints.PlansResource;
 import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.offer.LoggingUtils;
+import com.mesosphere.sdk.scheduler.MesosEventClient;
+import com.mesosphere.sdk.scheduler.SchedulerConfig;
+import com.mesosphere.sdk.scheduler.SchedulerUtils;
+import com.mesosphere.sdk.scheduler.AbstractScheduler;
 import com.mesosphere.sdk.scheduler.plan.DefaultPlan;
 import com.mesosphere.sdk.scheduler.plan.DefaultPlanManager;
 import com.mesosphere.sdk.scheduler.plan.Plan;
@@ -22,7 +26,7 @@ import org.slf4j.Logger;
 import java.util.*;
 
 /**
- * Class which sets up and executes the correct {@link ServiceScheduler} instance.
+ * Class which sets up and executes the correct {@link AbstractScheduler} instance.
  */
 public class FrameworkRunner {
     private static final int TWO_WEEK_SEC = 2 * 7 * 24 * 60 * 60;
@@ -73,14 +77,11 @@ public class FrameworkRunner {
 
             runSkeletonScheduler(schedulerConfig);
             // The skeleton scheduler should never exit. But just in case...:
-            SchedulerUtils.hardExit(SchedulerErrorCode.DRIVER_EXITED);
+            SchedulerUtils.hardExit(ExitCode.DRIVER_EXITED);
         }
 
-        FrameworkScheduler frameworkScheduler = new FrameworkScheduler(persister, mesosEventClient);
-        SchedulerApiServer httpServer = SchedulerApiServer.start(
-                schedulerConfig,
-                mesosEventClient.getHTTPEndpoints(),
-                new Runnable() {
+        FrameworkScheduler frameworkScheduler = new FrameworkScheduler(schedulerConfig, persister, mesosEventClient);
+        ApiServer httpServer = ApiServer.start(schedulerConfig, mesosEventClient.getHTTPEndpoints(), new Runnable() {
             @Override
             public void run() {
                 // Notify the framework that it can start accepting offers. This is to avoid the following scenario:
@@ -104,7 +105,7 @@ public class FrameworkRunner {
             // Following Mesos driver thread exit, attach to the API server thread. It should run indefinitely.
             httpServer.join();
         }
-        SchedulerUtils.hardExit(SchedulerErrorCode.DRIVER_EXITED);
+        SchedulerUtils.hardExit(ExitCode.DRIVER_EXITED);
     }
 
     @VisibleForTesting
@@ -163,7 +164,7 @@ public class FrameworkRunner {
                 new PlansResource(Collections.singletonList(uninstallPlanManager)),
                 // /v1/health: Invoked by Mesos as directed a configured health check in the scheduler Marathon app.
                 new HealthResource(Collections.singletonList(uninstallPlanManager)));
-        SchedulerApiServer httpServer = SchedulerApiServer.start(
+        ApiServer httpServer = ApiServer.start(
                 schedulerConfig,
                 resources,
                 new Runnable() {

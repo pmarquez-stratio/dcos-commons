@@ -1,4 +1,4 @@
-package com.mesosphere.sdk.scheduler;
+package com.mesosphere.sdk.framework;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -25,7 +25,10 @@ import com.mesosphere.sdk.offer.OfferAccepter;
 import com.mesosphere.sdk.offer.OfferRecommendation;
 import com.mesosphere.sdk.offer.OfferUtils;
 import com.mesosphere.sdk.offer.UnreserveOfferRecommendation;
-import com.mesosphere.sdk.queue.OfferQueue;
+import com.mesosphere.sdk.scheduler.MesosEventClient;
+import com.mesosphere.sdk.scheduler.Metrics;
+import com.mesosphere.sdk.scheduler.OfferResources;
+import com.mesosphere.sdk.scheduler.SchedulerUtils;
 import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
 import com.mesosphere.sdk.scheduler.MesosEventClient.UnexpectedResourcesResponse;
 import com.mesosphere.sdk.storage.Persister;
@@ -101,7 +104,7 @@ class OfferProcessor {
                         processQueuedOffers();
                     } catch (Exception e) {
                         LOGGER.error("Error encountered when processing offers, exiting to avoid zombie state", e);
-                        SchedulerUtils.hardExit(SchedulerErrorCode.ERROR);
+                        SchedulerUtils.hardExit(ExitCode.ERROR);
                     }
                 }
             });

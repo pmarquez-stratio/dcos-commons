@@ -1,7 +1,11 @@
-package com.mesosphere.sdk.scheduler;
+package com.mesosphere.sdk.framework;
 
 import com.codahale.metrics.jetty9.InstrumentedHandler;
 import com.google.common.annotations.VisibleForTesting;
+import com.mesosphere.sdk.scheduler.Metrics;
+import com.mesosphere.sdk.scheduler.SchedulerConfig;
+import com.mesosphere.sdk.scheduler.SchedulerUtils;
+
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.servlet.ServletContextHandler;
@@ -27,8 +31,8 @@ import java.util.TimerTask;
 /**
  * The SchedulerApiServer runs the Jetty {@link Server} that exposes the Scheduler's API.
  */
-public class SchedulerApiServer {
-    private static final Logger LOGGER = LoggerFactory.getLogger(SchedulerApiServer.class);
+public class ApiServer {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ApiServer.class);
 
     private final int port;
     private final Server server;
@@ -36,9 +40,9 @@ public class SchedulerApiServer {
 
     private Thread serverThread;
 
-    public static SchedulerApiServer start(
+    public static ApiServer start(
             SchedulerConfig schedulerConfig, Collection<Object> resources, Runnable startedCallback) {
-        SchedulerApiServer apiServer = new SchedulerApiServer(schedulerConfig, resources);
+        ApiServer apiServer = new ApiServer(schedulerConfig, resources);
         apiServer.start(new AbstractLifeCycle.AbstractLifeCycleListener() {
             @Override
             public void lifeCycleStarted(LifeCycle event) {
@@ -49,7 +53,7 @@ public class SchedulerApiServer {
     }
 
     @VisibleForTesting
-    SchedulerApiServer(SchedulerConfig schedulerConfig, Collection<Object> resources) {
+    ApiServer(SchedulerConfig schedulerConfig, Collection<Object> resources) {
         this.port = schedulerConfig.getApiServerPort();
         this.server = JettyHttpContainerFactory.createServer(
                 UriBuilder.fromUri("http://0.0.0.0/").port(this.port).build(),
@@ -91,7 +95,7 @@ public class SchedulerApiServer {
             public void run() {
                 if (!server.isStarted()) {
                     LOGGER.error("API Server failed to start at port {} within {}ms", port, startTimeout.toMillis());
-                    SchedulerUtils.hardExit(SchedulerErrorCode.API_SERVER_ERROR);
+                    SchedulerUtils.hardExit(ExitCode.API_SERVER_ERROR);
                 }
             }
         }, startTimeout.toMillis());
@@ -107,7 +111,7 @@ public class SchedulerApiServer {
                     server.join();
                 } catch (Exception e) {
                     LOGGER.error(String.format("API server at port %d failed with exception: ", port), e);
-                    SchedulerUtils.hardExit(SchedulerErrorCode.API_SERVER_ERROR);
+                    SchedulerUtils.hardExit(ExitCode.API_SERVER_ERROR);
                 } finally {
                     LOGGER.info("API server at port {} exiting", port);
                     try {

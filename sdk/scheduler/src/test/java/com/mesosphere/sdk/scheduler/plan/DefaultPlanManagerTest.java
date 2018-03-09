@@ -2,7 +2,8 @@ package com.mesosphere.sdk.scheduler.plan;
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.mesos.Protos;
-import com.mesosphere.sdk.reconciliation.Reconciler;
+
+import com.mesosphere.sdk.scheduler.Reconciler;
 import com.mesosphere.sdk.scheduler.plan.strategy.SerialStrategy;
 import com.mesosphere.sdk.testutils.TestConstants;
 import org.junit.Assert;

@@ -2,6 +2,7 @@ package com.mesosphere.sdk.scheduler;
 
 import com.mesosphere.sdk.dcos.Capabilities;
 import com.mesosphere.sdk.dcos.DcosVersion;
+import com.mesosphere.sdk.framework.Driver;
 import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.offer.LaunchOfferRecommendation;
 import com.mesosphere.sdk.offer.LoggingUtils;
@@ -794,7 +795,7 @@ public class DefaultSchedulerTest {
     }
 
     private DefaultScheduler getScheduler(ServiceSpec serviceSpec) throws PersisterException {
-        ServiceScheduler scheduler = DefaultScheduler.newBuilder(
+        AbstractScheduler scheduler = DefaultScheduler.newBuilder(
                 serviceSpec, SchedulerConfigTestUtils.getTestSchedulerConfig(), persister)
                 .build()
                 .start();

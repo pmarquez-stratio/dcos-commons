@@ -12,7 +12,7 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
-import com.mesosphere.sdk.scheduler.ServiceScheduler;
+import com.mesosphere.sdk.scheduler.AbstractScheduler;
 import com.mesosphere.sdk.offer.CommonIdUtils;
 import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.offer.OfferRecommendation;
@@ -70,15 +70,15 @@ public class QueueEventClientTest {
         }
     };
 
-    @Mock private ServiceScheduler mockClient1;
-    @Mock private ServiceScheduler mockClient2;
-    @Mock private ServiceScheduler mockClient3;
-    @Mock private ServiceScheduler mockClient4;
-    @Mock private ServiceScheduler mockClient5;
-    @Mock private ServiceScheduler mockClient6;
-    @Mock private ServiceScheduler mockClient7;
-    @Mock private ServiceScheduler mockClient8;
-    @Mock private ServiceScheduler mockClient9;
+    @Mock private AbstractScheduler mockClient1;
+    @Mock private AbstractScheduler mockClient2;
+    @Mock private AbstractScheduler mockClient3;
+    @Mock private AbstractScheduler mockClient4;
+    @Mock private AbstractScheduler mockClient5;
+    @Mock private AbstractScheduler mockClient6;
+    @Mock private AbstractScheduler mockClient7;
+    @Mock private AbstractScheduler mockClient8;
+    @Mock private AbstractScheduler mockClient9;
     @Mock private SchedulerConfig mockSchedulerConfig;
     @Mock private QueueEventClient.UninstallCallback mockUninstallCallback;
 
