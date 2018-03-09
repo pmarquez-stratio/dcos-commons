@@ -1,7 +1,8 @@
 package com.mesosphere.sdk.http.endpoints;
 
-import java.util.Arrays;
 import java.util.Collection;
+import java.util.stream.Collectors;
+
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.core.Response;
@@ -15,6 +16,9 @@ import com.mesosphere.sdk.scheduler.plan.PlanManager;
  */
 @Path("/v1/health")
 public class HealthResource {
+    /**
+     * We store the PlanManagers, not the underlying Plans, because PlanManagers can change their plans at any time.
+     */
     private final Collection<PlanManager> planManagers;
 
     /**
@@ -22,9 +26,7 @@ public class HealthResource {
      * coordinator.
      */
     public HealthResource(PlanCoordinator planCoordinator) {
-        this(Arrays.asList(
-                getDeploymentManager(planCoordinator),
-                getRecoveryManager(planCoordinator)));
+        this(getDeploymentAndRecoveryManagers(planCoordinator));
     }
 
     /**
@@ -60,15 +62,12 @@ public class HealthResource {
         return ResponseUtils.plainResponse(status.toString(), status);
     }
 
-    private static PlanManager getDeploymentManager(PlanCoordinator planCoordinator) {
+    /**
+     * Returns the {@link PlanManager}(s) which are marked as being for deployment or for recovery.
+     */
+    public static Collection<PlanManager> getDeploymentAndRecoveryManagers(PlanCoordinator planCoordinator) {
         return planCoordinator.getPlanManagers().stream()
-                .filter(planManager -> planManager.getPlan().isDeployPlan())
-                .findFirst().get();
-    }
-
-    private static PlanManager getRecoveryManager(PlanCoordinator planCoordinator) {
-        return planCoordinator.getPlanManagers().stream()
-                .filter(planManager -> planManager.getPlan().isRecoveryPlan())
-                .findFirst().get();
+                .filter(planManager -> planManager.getPlan().isDeployPlan() || planManager.getPlan().isRecoveryPlan())
+                .collect(Collectors.toList());
     }
 }

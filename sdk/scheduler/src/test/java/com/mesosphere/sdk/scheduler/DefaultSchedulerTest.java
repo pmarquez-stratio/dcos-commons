@@ -32,6 +32,7 @@ import org.apache.mesos.Protos.Offer;
 import org.apache.mesos.SchedulerDriver;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.contrib.java.lang.system.ExpectedSystemExit;
@@ -198,6 +199,12 @@ public class DefaultSchedulerTest {
         OfferResponse offerResponse = defaultScheduler.offers(Collections.emptyList());
         Assert.assertEquals(OfferResponse.Result.PROCESSED, offerResponse.result);
         Assert.assertTrue(offerResponse.recommendations.isEmpty());
+    }
+
+    @Ignore("TODO(nickbp)")
+    @Test
+    public void writeFinishedServiceTests() {
+        // TODO(nickbp) tests for finished service (FINISHED goal state and deploy/recovery both complete)
     }
 
     @Test

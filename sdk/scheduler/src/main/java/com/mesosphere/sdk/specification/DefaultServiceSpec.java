@@ -50,43 +50,50 @@ public class DefaultServiceSpec implements ServiceSpec {
 
     @NotNull(message = "Service name cannot be empty")
     @Size(min = 1, message = "Service name cannot be empty")
-    private String name;
-    private String role;
-    private String principal;
-    private String user;
+    private final String name;
+    private final String role;
+    private final String principal;
+    private final String user;
 
-    private String webUrl;
-    private String zookeeperConnection;
+    private final GoalState goalState;
+
+    private final String webUrl;
+    private final String zookeeperConnection;
 
     @Valid
     @NotNull
     @Size(min = 1, message = "At least one pod must be configured.")
     @UniquePodType(message = "Pod types must be unique")
-    private List<PodSpec> pods;
+    private final List<PodSpec> pods;
 
     @Valid
-    private ReplacementFailurePolicy replacementFailurePolicy;
+    private final ReplacementFailurePolicy replacementFailurePolicy;
 
     @JsonCreator
     public DefaultServiceSpec(
             @JsonProperty("name") String name,
             @JsonProperty("role") String role,
             @JsonProperty("principal") String principal,
+            @JsonProperty("user") String user,
+            @JsonProperty("goal") GoalState goalState,
             @JsonProperty("web-url") String webUrl,
             @JsonProperty("zookeeper") String zookeeperConnection,
-            @JsonProperty("pod-specs") List<PodSpec> pods,
             @JsonProperty("replacement-failure-policy") ReplacementFailurePolicy replacementFailurePolicy,
-            @JsonProperty("user") String user) {
+            @JsonProperty("pod-specs") List<PodSpec> pods) {
         this.name = name;
         this.role = role;
         this.principal = principal;
+        this.user = getUser(user, pods);
+        this.goalState = goalState == null ? GoalState.RUNNING : goalState;
+        if (goalState == GoalState.FINISHED) {
+            throw new IllegalArgumentException("Service goal state is deprecated FINISHED. Did you mean FINISH?");
+        }
         this.webUrl = webUrl;
         // If no zookeeperConnection string is configured, fallback to the default value.
         this.zookeeperConnection = StringUtils.isBlank(zookeeperConnection)
                 ? DcosConstants.MESOS_MASTER_ZK_CONNECTION_STRING : zookeeperConnection;
-        this.pods = pods;
         this.replacementFailurePolicy = replacementFailurePolicy;
-        this.user = getUser(user, pods);
+        this.pods = pods;
         ValidationUtils.validate(this);
     }
 
@@ -115,11 +122,12 @@ public class DefaultServiceSpec implements ServiceSpec {
                 builder.name,
                 builder.role,
                 builder.principal,
+                builder.user,
+                builder.goalState,
                 builder.webUrl,
                 builder.zookeeperConnection,
-                builder.pods,
                 builder.replacementFailurePolicy,
-                builder.user);
+                builder.pods);
     }
 
     /**
@@ -170,11 +178,12 @@ public class DefaultServiceSpec implements ServiceSpec {
         builder.name = copy.getName();
         builder.role = copy.getRole();
         builder.principal = copy.getPrincipal();
+        builder.user = copy.getUser();
+        builder.goalState = copy.getGoal();
         builder.zookeeperConnection = copy.getZookeeperConnection();
         builder.webUrl = copy.getWebUrl();
         builder.pods = copy.getPods();
         builder.replacementFailurePolicy = copy.getReplacementFailurePolicy().orElse(null);
-        builder.user = copy.getUser();
         return builder;
     }
 
@@ -194,6 +203,16 @@ public class DefaultServiceSpec implements ServiceSpec {
     }
 
     @Override
+    public String getUser() {
+        return user;
+    }
+
+    @JsonProperty("goal")
+    public GoalState getGoal() {
+        return goalState;
+    }
+
+    @Override
     public String getWebUrl() {
         return webUrl;
     }
@@ -204,13 +223,13 @@ public class DefaultServiceSpec implements ServiceSpec {
     }
 
     @Override
-    public List<PodSpec> getPods() {
-        return pods;
+    public Optional<ReplacementFailurePolicy> getReplacementFailurePolicy() {
+        return Optional.ofNullable(replacementFailurePolicy);
     }
 
     @Override
-    public Optional<ReplacementFailurePolicy> getReplacementFailurePolicy() {
-        return Optional.ofNullable(replacementFailurePolicy);
+    public List<PodSpec> getPods() {
+        return pods;
     }
 
     @Override
@@ -229,11 +248,6 @@ public class DefaultServiceSpec implements ServiceSpec {
      */
     public static ConfigurationComparator<ServiceSpec> getComparatorInstance() {
         return COMPARATOR;
-    }
-
-    @Override
-    public String getUser() {
-        return user;
     }
 
     /**
@@ -543,11 +557,12 @@ public class DefaultServiceSpec implements ServiceSpec {
         private String name;
         private String role;
         private String principal;
+        private String user;
+        private GoalState goalState;
         private String webUrl;
         private String zookeeperConnection;
-        private List<PodSpec> pods = new ArrayList<>();
         private ReplacementFailurePolicy replacementFailurePolicy;
-        private String user;
+        private List<PodSpec> pods = new ArrayList<>();
 
         private Builder() {
         }
@@ -587,6 +602,30 @@ public class DefaultServiceSpec implements ServiceSpec {
         }
 
         /**
+         * Sets the {@code user} and returns a reference to this Builder so that the methods can be chained
+         * together.
+         *
+         * @param user the {@code user} to set
+         * @return a reference to this Builder
+         */
+        public Builder user(String user) {
+            this.user = user;
+            return this;
+        }
+
+        /**
+         * Sets the {@code goalState} and returns a reference to this Builder so that the methods can be chained
+         * together. Default value is {@code RUNNING}.
+         *
+         * @param goalState the {@code goalState} to set
+         * @return a reference to this Builder
+         */
+        public Builder goalState(GoalState goalState) {
+            this.goalState = goalState;
+            return this;
+        }
+
+        /**
          * Sets the advertised web UI URL for the service and returns a reference to this Builder so that the methods
          * can be chained together.
          *
@@ -595,18 +634,6 @@ public class DefaultServiceSpec implements ServiceSpec {
          */
         public Builder webUrl(String webUrl) {
             this.webUrl = webUrl;
-            return this;
-        }
-
-        /**
-         * Sets the {@code user} and returns a reference to this Builder so that the methods can be chained
-         * together.
-         *
-         * @param user the {@code principal} to set
-         * @return a reference to this Builder
-         */
-        public Builder user(String user) {
-            this.user = user;
             return this;
         }
 

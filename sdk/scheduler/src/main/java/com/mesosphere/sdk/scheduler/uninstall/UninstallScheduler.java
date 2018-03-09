@@ -136,7 +136,7 @@ public class UninstallScheduler extends AbstractScheduler {
             // return finished(), upstream will finish the uninstall by doing one of the following:
             // - Mono-service: Upstream will stop/remove the framework, then unregistered() will be called.
             // - Multi-service: Upstream will remove us from the list of services without calling unregistered().
-            return OfferResponse.finished();
+            return OfferResponse.uninstalled();
         } else {
             // No recommendations. Upstream should invoke the cleaner against any unexpected resources in unclaimed
             // offers (including the ones that apply to our service), and then notify us via clean() so that we can

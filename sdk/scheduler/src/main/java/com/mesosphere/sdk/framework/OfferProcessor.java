@@ -25,6 +25,7 @@ import com.mesosphere.sdk.offer.OfferAccepter;
 import com.mesosphere.sdk.offer.OfferRecommendation;
 import com.mesosphere.sdk.offer.OfferUtils;
 import com.mesosphere.sdk.offer.UnreserveOfferRecommendation;
+import com.mesosphere.sdk.scheduler.DefaultScheduler;
 import com.mesosphere.sdk.scheduler.MesosEventClient;
 import com.mesosphere.sdk.scheduler.Metrics;
 import com.mesosphere.sdk.scheduler.OfferResources;
@@ -231,11 +232,24 @@ class OfferProcessor {
         OfferResponse offerResponse = mesosEventClient.offers(offers);
         LOGGER.info("Offer result: {} with {} recommendations for {} offers",
                 offerResponse.result, offerResponse.recommendations.size(), offers.size());
-        if (offerResponse.result == OfferResponse.Result.FINISHED) {
+        switch (offerResponse.result) {
+        case FINISHED:
+            // Services with FINISHED GoalState are not directly supported by OfferProcessor. Requires a proxy client:
+            // - API Resources passed to HTTP service by FrameworkRunner would need to be updated
+            // - Parent FrameworkScheduler would need to be updated (for sending TaskStatuses and registered calls)
+            throw new IllegalStateException("Got unsupported " + offerResponse.result + " from service");
+        case UNINSTALLED:
             // The service has finished uninstalling. Unregister and delete the framework.
+            if (mesosEventClient instanceof DefaultScheduler) {
+                // The service wants to shut down.
+            }
             destroyFramework();
             isDeregistered.set(true);
             return;
+        case NOT_READY:
+        case PROCESSED:
+            // Both handled below.
+            break;
         }
 
         Collection<Protos.Offer> unusedOffers =

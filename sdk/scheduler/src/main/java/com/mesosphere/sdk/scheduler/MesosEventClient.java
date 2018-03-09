@@ -86,9 +86,14 @@ public interface MesosEventClient {
             PROCESSED,
 
             /**
+             * The client has finished running and should be switched to uninstall mode.
+             */
+            FINISHED,
+
+            /**
              * The client has finished an uninstall and can be shut down.
              */
-            FINISHED
+            UNINSTALLED
         }
 
         /**
@@ -125,12 +130,20 @@ public interface MesosEventClient {
         }
 
         /**
-         * Tells the caller that this client has finished processing and can be shut down. The caller should
-         * long-decline any unused offers. After this is returned, the caller may then notify the client of framework
-         * deregistration by calling {@link MesosEventClient#unregistered()}, but this is not required.
+         * Tells the caller that this client has finished running and can be switched to uninstall mode. The caller
+         * should long-decline any unused offers.
          */
         public static OfferResponse finished() {
             return new OfferResponse(Result.FINISHED, Collections.emptyList());
+        }
+
+        /**
+         * Tells the caller that this client has finished uninstalling and can be shut down. The caller should
+         * long-decline any unused offers. After this is returned, the caller may then notify the client of framework
+         * deregistration by calling {@link MesosEventClient#unregistered()}, but this is not required.
+         */
+        public static OfferResponse uninstalled() {
+            return new OfferResponse(Result.UNINSTALLED, Collections.emptyList());
         }
 
         private OfferResponse(Result result, Collection<OfferRecommendation> recommendations) {

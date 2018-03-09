@@ -149,7 +149,13 @@ public class QueueEventClientTest {
     @Ignore("TODO(nickbp)")
     @Test
     public void writeUninstalledServiceTests() {
-        // TODO(nickbp) tests for uninstalled service (FINISHED for offers)
+        // TODO(nickbp) tests for uninstalled service (UNINSTALLED for offers)
+    }
+
+    @Ignore("TODO(nickbp)")
+    @Test
+    public void writeFinishedServiceTests() {
+        // TODO(nickbp) tests for finished service (FINISHED for offers)
     }
 
     @Test

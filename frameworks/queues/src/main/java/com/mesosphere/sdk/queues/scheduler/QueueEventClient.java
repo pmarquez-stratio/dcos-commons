@@ -210,7 +210,8 @@ public class QueueEventClient implements MesosEventClient {
         List<Protos.Offer> remainingOffers = new ArrayList<>();
         remainingOffers.addAll(offers);
 
-        Collection<String> runsToRemove = new ArrayList<>();
+        Collection<String> finishedRuns = new ArrayList<>();
+        Collection<String> uninstalledRuns = new ArrayList<>();
 
         Collection<AbstractScheduler> runs = runInfoProvider.lockAllR();
         LOGGER.info("Sending {} offer{} to {} service{}:",
@@ -238,11 +239,16 @@ public class QueueEventClient implements MesosEventClient {
 
                 switch (response.result) {
                 case FINISHED:
-                    // This client has completed an uninstall operation.
-                    runsToRemove.add(run.getName());
+                    // This client has completed running and can be switched to uninstall.
+                    finishedRuns.add(run.getName());
+                    break;
+                case UNINSTALLED:
+                    // This client has completed uninstall and can be removed.
+                    uninstalledRuns.add(run.getName());
                     break;
                 case NOT_READY:
-                    // This client wasn't ready. Tell upstream to short-decline any remaining offers.
+                    // This client wasn't ready. Tell upstream to short-decline any remaining offers so that it can get
+                    // another chance shortly.
                     anyNotReady = true;
                     break;
                 case PROCESSED:
@@ -257,15 +263,25 @@ public class QueueEventClient implements MesosEventClient {
             runInfoProvider.unlockR();
         }
 
+        if (!finishedRuns.isEmpty()) {
+            LOGGER.info("Starting uninstall for {} service{}: {} (from {} total services)",
+                    finishedRuns.size(), finishedRuns.size() == 1 ? "" : "s", finishedRuns);
+            for (String run : finishedRuns) {
+                // Switch run to UninstallScheduler.
+                // NOTE: Function grabs a lock internally, so we need to be unlocked when calling it here.
+                uninstallRun(run);
+            }
+        }
+
         boolean allRemoved = false;
-        if (!runsToRemove.isEmpty()) {
+        if (!uninstalledRuns.isEmpty()) {
             // Note: It's possible that we can have a race where we attempt to remove the same run twice. This is fine.
             //       (Picture two near-simultaneous calls to offers(): Both send offers, both get FINISHED back, ...)
             Map<String, AbstractScheduler> runsMap = runInfoProvider.lockRW();
             LOGGER.info("Removing {} uninstalled service{}: {} (from {} total services)",
-                    runsToRemove.size(), runsToRemove.size() == 1 ? "" : "s", runsToRemove, runsMap.size());
+                    uninstalledRuns.size(), uninstalledRuns.size() == 1 ? "" : "s", uninstalledRuns, runsMap.size());
             try {
-                for (String run : runsToRemove) {
+                for (String run : uninstalledRuns) {
                     runsMap.remove(run);
                 }
                 if (runsMap.isEmpty()) {
@@ -278,7 +294,7 @@ public class QueueEventClient implements MesosEventClient {
             // Just in case, avoid invoking the uninstall callback until we are in an unlocked state. This avoids
             // deadlock if the callback itself calls back into us for any reason. This also ensures that we aren't
             // blocking other operations (e.g. offer/status handling) while these callbacks are running.
-            for (String run : runsToRemove) {
+            for (String run : uninstalledRuns) {
                 uninstallCallback.uninstalled(run);
             }
         }
@@ -289,7 +305,7 @@ public class QueueEventClient implements MesosEventClient {
                 // Yes: We're uninstalling everything and all runs have been cleaned up. Tell the caller that they can
                 // finish with final framework cleanup. After they've finished, they will invoke unregistered(), at
                 // which point we can set our deploy plan to complete.
-                return OfferResponse.finished();
+                return OfferResponse.uninstalled();
             } else {
                 // No: We're just not actively running anything. Decline short until we have runs.
                 return OfferResponse.notReady(recommendations);
