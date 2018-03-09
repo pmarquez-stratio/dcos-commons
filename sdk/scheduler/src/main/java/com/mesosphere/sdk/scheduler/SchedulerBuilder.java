@@ -182,8 +182,7 @@ public class SchedulerBuilder {
      * Assigns a custom framework configuration for this service. This is only relevant when a single framework is
      * running multiple services. By default the framework configuration is derived from the {@link ServiceSpec}.
      *
-     * @param multiServiceFrameworkConfig a custom framework config to use, otherwise one will derived from the
-     *                                    {@link ServiceSpec} provided in the constructor
+     * @param storageNamespace storage namespace to use for this service
      */
     public SchedulerBuilder setStorageNamespace(String storageNamespace) {
         this.storageNamespace = Optional.of(storageNamespace);

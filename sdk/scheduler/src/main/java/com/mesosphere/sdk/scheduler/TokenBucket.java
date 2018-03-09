@@ -32,10 +32,8 @@ public class TokenBucket {
     /**
      * A TokenBucket acts as a rate limiting helper.  Clients should not perform rate limited work without acquiring a
      * token from the {@link #tryAcquire()} method.
-     * @param initial The initial number of tokens available
-     * @param capacity The maximum number of tokens the bucket may hold
-     * @param incrementInterval The interval between adding new tokens to the bucket
-     * @param acquireInterval  The minimum interval between allowing tokens to be acquired
+     *
+     * @param builder the configured builder
      */
     protected TokenBucket(Builder builder) {
         this.initial = builder.initial;

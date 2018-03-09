@@ -100,9 +100,25 @@ public class QueueEventClientTest {
     }
 
     @Test
-    public void putClients() {
+    public void putClientsDuplicate() {
         client.putRun(mockClient1);
         client.putRun(mockClient2);
+        try {
+            client.putRun(mockClient2);
+            Assert.fail("Expected exception: duplicate key");
+        } catch (IllegalArgumentException e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void putClientsRegistration() {
+        client.putRun(mockClient1);
+        client.registered(false);
+        verify(mockClient1).registered(false);
+        client.putRun(mockClient2);
+        // Should have been called automatically due to already being registered:
+        verify(mockClient2).registered(false);
         try {
             client.putRun(mockClient2);
             Assert.fail("Expected exception: duplicate key");

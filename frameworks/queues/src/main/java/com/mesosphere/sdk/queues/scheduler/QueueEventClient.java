@@ -61,10 +61,14 @@ public class QueueEventClient implements MesosEventClient {
     private final Optional<Plan> uninstallPlan;
     private final DefaultQueueInfoProvider runInfoProvider;
     private final UninstallCallback uninstallCallback;
+    // Keeps track of whether we've had the registered callback yet.
+    // When a client is added, if we're already registered then invoke 'registered()' manually against that client
+    private boolean hasRegistered;
 
     public QueueEventClient(SchedulerConfig schedulerConfig, UninstallCallback uninstallCallback) {
         this.runInfoProvider = new DefaultQueueInfoProvider();
         this.uninstallCallback = uninstallCallback;
+        this.hasRegistered = false;
 
         if (schedulerConfig.isUninstallEnabled()) {
             this.deregisterStep = new DeregisterStep();
@@ -102,6 +106,10 @@ public class QueueEventClient implements MesosEventClient {
                 runs.put(run.getName(), previousRun);
                 throw new IllegalArgumentException(
                         String.format("Service named '%s' is already present", run.getName()));
+            }
+            if (hasRegistered) {
+                // We are already registered. Manually call registered() against this client so that it can initialize.
+                run.registered(false);
             }
             return this;
         } finally {
@@ -162,13 +170,15 @@ public class QueueEventClient implements MesosEventClient {
 
     @Override
     public void registered(boolean reRegistered) {
-        Collection<ServiceScheduler> runs = runInfoProvider.lockAllR();
+        // Take exclusive lock in order to lock against clients being added/removed (hasRegistered bit):
+        Collection<ServiceScheduler> runs = runInfoProvider.lockRW().values();
+        hasRegistered = true;
         LOGGER.info("Notifying {} services of {}",
                 runs.size(), reRegistered ? "re-registration" : "initial registration");
         try {
             runs.stream().forEach(c -> c.registered(reRegistered));
         } finally {
-            runInfoProvider.unlockR();
+            runInfoProvider.unlockRW();
         }
     }
 
