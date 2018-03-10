@@ -20,7 +20,6 @@ import java.util.UUID;
  */
 public class SpecStoreTest {
     private final Persister persister = new MemPersister();
-    private static final UUID defaultID = UUID.fromString("fe729576-85a0-3eb2-9391-0204b3e018c0");
 
     private SpecStore specStore;
 
@@ -34,12 +33,6 @@ public class SpecStoreTest {
         UUID first = SpecStore.getId(getSpec());
         UUID second = SpecStore.getId(getSpec());
         Assert.assertEquals(first, second);
-    }
-
-    @Test
-    public void equalIdsAcrossRestart() throws ConfigStoreException {
-        UUID id = SpecStore.getId(getSpec());
-        Assert.assertEquals(defaultID, id);
     }
 
     @Test

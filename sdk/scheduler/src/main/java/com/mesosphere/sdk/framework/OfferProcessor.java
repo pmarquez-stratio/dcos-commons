@@ -25,7 +25,6 @@ import com.mesosphere.sdk.offer.OfferAccepter;
 import com.mesosphere.sdk.offer.OfferRecommendation;
 import com.mesosphere.sdk.offer.OfferUtils;
 import com.mesosphere.sdk.offer.UnreserveOfferRecommendation;
-import com.mesosphere.sdk.scheduler.DefaultScheduler;
 import com.mesosphere.sdk.scheduler.MesosEventClient;
 import com.mesosphere.sdk.scheduler.Metrics;
 import com.mesosphere.sdk.scheduler.OfferResources;
@@ -170,7 +169,8 @@ class OfferProcessor {
                     return;
                 }
                 LOGGER.warn("Offers in progress {} is non-empty, sleeping for {}ms ...",
-                        offersInProgress, sleepDurationMs);
+                        offersInProgress.stream().map(id -> id.getValue()).collect(Collectors.toList()),
+                        sleepDurationMs);
             }
             Thread.sleep(sleepDurationMs);
         }
@@ -237,12 +237,12 @@ class OfferProcessor {
             // Services with FINISHED GoalState are not directly supported by OfferProcessor. Requires a proxy client:
             // - API Resources passed to HTTP service by FrameworkRunner would need to be updated
             // - Parent FrameworkScheduler would need to be updated (for sending TaskStatuses and registered calls)
-            throw new IllegalStateException("Got unsupported " + offerResponse.result + " from service");
+            declineShort(offers);
+            LOGGER.error("Got unsupported {} from service", offerResponse.result);
+            return;
         case UNINSTALLED:
             // The service has finished uninstalling. Unregister and delete the framework.
-            if (mesosEventClient instanceof DefaultScheduler) {
-                // The service wants to shut down.
-            }
+            declineShort(offers);
             destroyFramework();
             isDeregistered.set(true);
             return;
@@ -270,6 +270,10 @@ class OfferProcessor {
                 mesosEventClient.getUnexpectedResources(unusedOffers);
         Collection<OfferRecommendation> cleanupRecommendations =
                 toCleanupRecommendations(unexpectedResourcesResponse.offerResources);
+        LOGGER.info("Cleanup result: {} with {} recommendations for {} offers",
+                unexpectedResourcesResponse.result,
+                cleanupRecommendations.size(),
+                unusedOffers.size());
 
         // Decline the offers that haven't been used for either offer evaluation or resource cleanup.
         unusedOffers = OfferUtils.filterOutAcceptedOffers(unusedOffers, cleanupRecommendations);

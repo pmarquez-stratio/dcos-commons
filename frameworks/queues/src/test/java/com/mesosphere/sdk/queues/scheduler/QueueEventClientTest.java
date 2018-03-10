@@ -5,14 +5,13 @@ import org.apache.mesos.Protos.Offer;
 import org.apache.mesos.Protos.TaskState;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
-import com.mesosphere.sdk.scheduler.AbstractScheduler;
+import com.mesosphere.sdk.scheduler.DefaultScheduler;
 import com.mesosphere.sdk.offer.CommonIdUtils;
 import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.offer.OfferRecommendation;
@@ -20,6 +19,7 @@ import com.mesosphere.sdk.offer.ReserveOfferRecommendation;
 import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
 import com.mesosphere.sdk.scheduler.MesosEventClient.StatusResponse;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
+import com.mesosphere.sdk.scheduler.uninstall.UninstallScheduler;
 
 import static org.mockito.Mockito.*;
 
@@ -70,15 +70,16 @@ public class QueueEventClientTest {
         }
     };
 
-    @Mock private AbstractScheduler mockClient1;
-    @Mock private AbstractScheduler mockClient2;
-    @Mock private AbstractScheduler mockClient3;
-    @Mock private AbstractScheduler mockClient4;
-    @Mock private AbstractScheduler mockClient5;
-    @Mock private AbstractScheduler mockClient6;
-    @Mock private AbstractScheduler mockClient7;
-    @Mock private AbstractScheduler mockClient8;
-    @Mock private AbstractScheduler mockClient9;
+    @Mock private DefaultScheduler mockClient1;
+    @Mock private DefaultScheduler mockClient2;
+    @Mock private DefaultScheduler mockClient3;
+    @Mock private DefaultScheduler mockClient4;
+    @Mock private DefaultScheduler mockClient5;
+    @Mock private DefaultScheduler mockClient6;
+    @Mock private DefaultScheduler mockClient7;
+    @Mock private DefaultScheduler mockClient8;
+    @Mock private DefaultScheduler mockClient9;
+    @Mock private UninstallScheduler mockUninstallClient;
     @Mock private SchedulerConfig mockSchedulerConfig;
     @Mock private QueueEventClient.UninstallCallback mockUninstallCallback;
 
@@ -140,22 +141,58 @@ public class QueueEventClientTest {
         Assert.assertTrue(response.recommendations.isEmpty());
     }
 
-    @Ignore("TODO(nickbp)")
     @Test
-    public void writeUnexpectedResourcesTests() {
-        // TODO(nickbp) tests for getUnexpectedResources
+    public void uninstallRequestedClient() {
+        when(mockClient1.toUninstallScheduler()).thenReturn(mockUninstallClient);
+        when(mockUninstallClient.offers(any())).thenReturn(OfferResponse.uninstalled());
+        when(mockUninstallClient.getName()).thenReturn("1");
+        client.putRun(mockClient1);
+        client.uninstallRun("1");
+        client.uninstallRun("1"); // no-op
+
+        verifyZeroInteractions(mockUninstallCallback);
+        client.offers(Collections.emptyList());
+        verify(mockUninstallCallback).uninstalled("1");
+
+        try {
+            // Should fail since the client was removed from the map:
+            client.uninstallRun("1");
+            Assert.fail("Expected exception");
+        } catch (IllegalArgumentException e) {
+            // expected
+        }
     }
 
-    @Ignore("TODO(nickbp)")
     @Test
-    public void writeUninstalledServiceTests() {
-        // TODO(nickbp) tests for uninstalled service (UNINSTALLED for offers)
+    public void uninstallFinishedClient() {
+        when(mockClient1.toUninstallScheduler()).thenReturn(mockUninstallClient);
+        when(mockClient1.offers(any())).thenReturn(OfferResponse.finished());
+        client.putRun(mockClient1);
+
+        // mockClient1 is converted to mockUninstallClient:
+        client.offers(Collections.emptyList());
+        verify(mockClient1).toUninstallScheduler();
+
+        // mockUninstallClient is removed:
+        when(mockUninstallClient.offers(any())).thenReturn(OfferResponse.uninstalled());
+        when(mockUninstallClient.getName()).thenReturn("hello");
+
+        verifyZeroInteractions(mockUninstallCallback);
+        client.offers(Collections.emptyList());
+        verify(mockUninstallCallback).uninstalled("hello");
     }
 
-    @Ignore("TODO(nickbp)")
     @Test
-    public void writeFinishedServiceTests() {
-        // TODO(nickbp) tests for finished service (FINISHED for offers)
+    public void finishedAndUninstalled() {
+        when(mockClient1.offers(any())).thenReturn(OfferResponse.uninstalled());
+        when(mockClient2.offers(any())).thenReturn(OfferResponse.finished());
+        when(mockClient3.offers(any())).thenReturn(OfferResponse.uninstalled());
+        when(mockClient4.offers(any())).thenReturn(OfferResponse.finished());
+        client
+                .putRun(mockClient1)
+                .putRun(mockClient2)
+                .putRun(mockClient3)
+                .putRun(mockClient4);
     }
 
     @Test

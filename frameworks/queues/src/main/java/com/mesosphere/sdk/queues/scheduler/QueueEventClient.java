@@ -495,12 +495,7 @@ public class QueueEventClient implements MesosEventClient {
             serviceOffers = new HashMap<>();
             map.put(serviceName, serviceOffers);
         }
-        OfferResources serviceOffer = serviceOffers.get(offer.getId());
-        if (serviceOffer == null) {
-            serviceOffer = new OfferResources(offer);
-            serviceOffers.put(offer.getId(), serviceOffer);
-        }
-        return serviceOffer;
+        return getEntry(serviceOffers, offer);
     }
 
     /**

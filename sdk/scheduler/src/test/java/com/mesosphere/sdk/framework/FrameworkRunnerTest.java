@@ -8,7 +8,6 @@ import java.util.Optional;
 import org.apache.mesos.Protos;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -19,15 +18,22 @@ import com.mesosphere.sdk.framework.FrameworkConfig;
 import com.mesosphere.sdk.framework.FrameworkRunner;
 import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.scheduler.EnvStore;
+import com.mesosphere.sdk.scheduler.MesosEventClient;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.scheduler.plan.Status;
+import com.mesosphere.sdk.storage.Persister;
+import com.mesosphere.sdk.storage.PersisterException;
+import com.mesosphere.sdk.storage.StorageError.Reason;
 import com.mesosphere.sdk.testutils.TestConstants;
 
 import static org.mockito.Mockito.*;
 
 public class FrameworkRunnerTest {
 
+    @Mock private SchedulerConfig mockSchedulerConfig;
     @Mock private Capabilities mockCapabilities;
+    @Mock private MesosEventClient mockMesosEventClient;
+    @Mock private Persister mockPersister;
 
     @Before
     public void beforeEach() {
@@ -43,14 +49,27 @@ public class FrameworkRunnerTest {
         Assert.assertTrue(FrameworkRunner.EMPTY_DEPLOY_PLAN.getChildren().isEmpty());
     }
 
-    @Ignore("TODO(nickbp): test skeleton scheduler behavior when uninstall + no fwkid")
     @Test
-    public void uninstallSkeletonScheduler() {
-        // TODO(nickbp): check skeleton scheduler launch
+    public void testFinishedUninstall() throws Exception {
+        FrameworkRunner runner = new FrameworkRunner(mockSchedulerConfig, null, false);
+        when(mockSchedulerConfig.isUninstallEnabled()).thenReturn(true);
+        when(mockPersister.get("FrameworkID")).thenThrow(new PersisterException(Reason.NOT_FOUND, "hi"));
+        Exception abort = new IllegalStateException("Aborting HTTP server run");
+        // Don't actually run the HTTP server -- it won't exit:
+        when(mockSchedulerConfig.getApiServerPort()).thenThrow(abort);
+        try {
+            runner.registerAndRunFramework(mockPersister, mockMesosEventClient);
+            Assert.fail("Expected abort exception to be thrown");
+        } catch (IllegalStateException ex) {
+            Assert.assertSame(abort, ex);
+        }
+        // Shouldn't have used the regular endpoints. Instead should have used stub endpoints:
+        verify(mockMesosEventClient, never()).getHTTPEndpoints();
+        verify(mockPersister).recursiveDelete("/");
     }
 
     @Test
-    public void minimalFrameworkInfoInitial() {
+    public void testMinimalFrameworkInfoInitial() {
         EnvStore envStore = EnvStore.fromMap(getMinimalMap());
         SchedulerConfig schedulerConfig = SchedulerConfig.fromEnvStore(envStore);
         FrameworkConfig frameworkConfig = FrameworkConfig.fromEnvStore(envStore);
@@ -71,7 +90,7 @@ public class FrameworkRunnerTest {
     }
 
     @Test
-    public void minimalFrameworkInfoRelaunch() {
+    public void testMinimalFrameworkInfoRelaunch() {
         EnvStore envStore = EnvStore.fromMap(getMinimalMap());
         SchedulerConfig schedulerConfig = SchedulerConfig.fromEnvStore(envStore);
         FrameworkConfig frameworkConfig = FrameworkConfig.fromEnvStore(envStore);
@@ -92,7 +111,7 @@ public class FrameworkRunnerTest {
     }
 
     @Test
-    public void exhaustiveFrameworkInfo() {
+    public void testExhaustiveFrameworkInfo() {
         Map<String, String> env = getMinimalMap();
         env.put("FRAMEWORK_PRINCIPAL", "custom-principal");
         env.put("FRAMEWORK_USER", "custom-user");
