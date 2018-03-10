@@ -193,8 +193,6 @@ public class DefaultSchedulerTest {
     @Test
     public void testEmptyOffers() {
         // Reconcile already triggered via registration during setup:
-        verify(mockSchedulerDriver, times(1)).reconcileTasks(any());
-
         OfferResponse offerResponse = defaultScheduler.offers(Collections.emptyList());
         Assert.assertEquals(OfferResponse.Result.PROCESSED, offerResponse.result);
         Assert.assertTrue(offerResponse.recommendations.isEmpty());
@@ -403,8 +401,6 @@ public class DefaultSchedulerTest {
         verify(mockSchedulerDriver, times(1)).reconcileTasks(
                 Arrays.asList(getTaskStatus(launchedTaskId, Protos.TaskState.TASK_RUNNING)));
         statusUpdate(launchedTaskId, Protos.TaskState.TASK_RUNNING);
-        // When explicit reconciliation completes, the scheduler should trigger implicit reconciliation:
-        verify(mockSchedulerDriver, times(1)).reconcileTasks(Collections.emptyList());
 
         // Second attempt after reconciliation results in triggering task relaunch
         response = defaultScheduler.offers(offers);

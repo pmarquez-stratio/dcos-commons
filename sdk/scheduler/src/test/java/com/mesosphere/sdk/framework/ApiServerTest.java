@@ -8,7 +8,6 @@ import org.apache.http.message.BasicHttpRequest;
 import org.junit.Assert;
 import org.junit.Test;
 
-import com.mesosphere.sdk.framework.ApiServer;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
 
 import java.net.URI;

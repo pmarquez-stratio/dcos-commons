@@ -12,9 +12,6 @@ import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-import com.mesosphere.sdk.framework.Driver;
-import com.mesosphere.sdk.framework.FrameworkScheduler;
-import com.mesosphere.sdk.framework.OfferProcessor;
 import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.offer.evaluate.EvaluationOutcome;
 import com.mesosphere.sdk.offer.evaluate.placement.IsLocalRegionRule;

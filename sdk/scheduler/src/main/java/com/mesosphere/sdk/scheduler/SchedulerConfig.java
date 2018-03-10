@@ -121,8 +121,8 @@ public class SchedulerConfig {
 
     /**
      * Environment variables for configuring implicit reconciliation:
-     * <ul><li>Delay before first implicit reconciliation is triggered (in milliseconds)</li>
-     * <li>Duration between implicit reconciliations (in milliseconds)</li></ul>
+     * <ul><li>Delay before first implicit reconciliation is triggered (in milliseconds).</li>
+     * <li>Duration between implicit reconciliations (in milliseconds).</li></ul>
      */
     private static final String IMPLICIT_RECONCILIATION_DELAY_MS_ENV = "IMPLICIT_RECONCILIATION_DELAY_MS";
     private static final String IMPLICIT_RECONCILIATION_PERIOD_MS_ENV = "IMPLICIT_RECONCILIATION_PERIOD_MS";

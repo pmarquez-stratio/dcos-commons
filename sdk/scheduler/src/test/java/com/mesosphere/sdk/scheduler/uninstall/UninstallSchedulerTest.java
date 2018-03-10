@@ -85,7 +85,6 @@ public class UninstallSchedulerTest extends DefaultCapabilitiesTestSuite {
     public void testEmptyOffers() throws Exception {
         UninstallScheduler uninstallScheduler = getUninstallScheduler();
         Assert.assertEquals(OfferResponse.Result.PROCESSED, uninstallScheduler.offers(Collections.emptyList()).result);
-        verify(mockSchedulerDriver, times(1)).reconcileTasks(any());
         verify(mockSchedulerDriver, times(0)).acceptOffers(any(), anyCollectionOf(Protos.Offer.Operation.class), any());
         verify(mockSchedulerDriver, times(0)).declineOffer(any(), any());
     }

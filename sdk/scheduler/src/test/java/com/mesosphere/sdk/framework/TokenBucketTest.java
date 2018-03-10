@@ -3,8 +3,6 @@ package com.mesosphere.sdk.framework;
 import org.junit.Assert;
 import org.junit.Test;
 
-import com.mesosphere.sdk.framework.TokenBucket;
-
 import java.time.Duration;
 
 /**

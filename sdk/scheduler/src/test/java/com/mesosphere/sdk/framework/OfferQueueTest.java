@@ -1,6 +1,5 @@
 package com.mesosphere.sdk.framework;
 
-import com.mesosphere.sdk.framework.OfferQueue;
 import com.mesosphere.sdk.testutils.TestConstants;
 import org.apache.mesos.Protos;
 import org.junit.Assert;

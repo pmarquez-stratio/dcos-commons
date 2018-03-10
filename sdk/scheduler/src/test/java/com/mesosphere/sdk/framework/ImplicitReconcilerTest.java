@@ -7,7 +7,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import com.mesosphere.sdk.framework.Driver;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
 
 import static org.mockito.Mockito.*;

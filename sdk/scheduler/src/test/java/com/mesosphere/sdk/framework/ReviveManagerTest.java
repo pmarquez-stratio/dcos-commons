@@ -1,7 +1,5 @@
 package com.mesosphere.sdk.framework;
 
-import com.mesosphere.sdk.framework.Driver;
-import com.mesosphere.sdk.framework.ReviveManager;
 import com.mesosphere.sdk.scheduler.plan.PodInstanceRequirement;
 import com.mesosphere.sdk.scheduler.plan.Step;
 import com.mesosphere.sdk.scheduler.plan.TestStep;
