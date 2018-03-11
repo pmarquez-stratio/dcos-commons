@@ -42,14 +42,10 @@ public class StateQueriesTest {
     private static final String FILE_NAME = "test-file";
     private static final String FILE_CONTENT = "test data";
 
-    private StateStore stateStore;
-    private Persister persister;
     @Mock FormDataContentDisposition formDataContentDisposition;
 
     @Before
     public void beforeEach() {
-        persister = new MemPersister();
-        stateStore = new StateStore(persister);
         MockitoAnnotations.initMocks(this);
     }
 
@@ -153,28 +149,6 @@ public class StateQueriesTest {
     }
 
     @Test
-    public void testStoreAndGetFile() throws IOException {
-        InputStream inputStream = new ByteArrayInputStream(FILE_CONTENT.getBytes(StateQueries.FILE_ENCODING));
-        when(formDataContentDisposition.getSize()).thenReturn((long)FILE_CONTENT.length());
-        StateQueries.storeFile(stateStore, FILE_NAME, inputStream, formDataContentDisposition);
-        Response response = StateQueries.getFile(stateStore, FILE_NAME);
-        assertEquals(200, response.getStatus());
-        assertEquals(FILE_CONTENT, response.getEntity());
-    }
-
-    @Test
-    public void testStoreAndListFiles() throws IOException {
-        InputStream inputStream = new ByteArrayInputStream(FILE_CONTENT.getBytes(StateQueries.FILE_ENCODING));
-        when(formDataContentDisposition.getSize()).thenReturn((long)FILE_CONTENT.length());
-        StateQueries.storeFile(stateStore, FILE_NAME + "-1", inputStream, formDataContentDisposition);
-        StateQueries.storeFile(stateStore, FILE_NAME + "-2", inputStream, formDataContentDisposition);
-        Collection<String> file_names = new HashSet<>();
-        file_names.add(FILE_NAME + "-1");
-        file_names.add(FILE_NAME + "-2");
-        assertEquals(file_names, StateQueries.getFileNames(stateStore));
-    }
-
-    @Test
     public void testPutAndGetFile() throws IOException {
         InputStream inputStream = new ByteArrayInputStream(FILE_CONTENT.getBytes(StateQueries.FILE_ENCODING));
         when(formDataContentDisposition.getFileName()).thenReturn(FILE_NAME);
@@ -191,7 +165,7 @@ public class StateQueriesTest {
 
     @Test
     public void testBadUpload() throws IOException {
-        int fileSize = StateQueries.FILE_SIZE / FILE_CONTENT.length() * 100;
+        int fileSize = StateQueries.FILE_SIZE_LIMIT / FILE_CONTENT.length() * 100;
         String input = String.join("", Collections.nCopies(fileSize, FILE_CONTENT));
         InputStream inputStream = new ByteArrayInputStream(input.getBytes(StateQueries.FILE_ENCODING));
         when(formDataContentDisposition.getFileName()).thenReturn(FILE_NAME);
@@ -201,19 +175,15 @@ public class StateQueriesTest {
 
         Response response = StateQueries.putFile(mockStateStore, inputStream, formDataContentDisposition);
         assertEquals(400, response.getStatus());
-        assertEquals(StateQueries.UPLOAD_TOO_BIG_ERROR_MESSAGE, response.getEntity());
+        assertEquals("Stream exceeds 1024 byte size limit", response.getEntity());
     }
 
     @Test
     public void testNoFileUpload() throws IOException {
-        when(formDataContentDisposition.getFileName()).thenReturn(FILE_NAME);
-        when(formDataContentDisposition.getSize()).thenReturn((long)0);
-        when(mockStateStore.fetchProperty(StateQueries.FILE_NAME_PREFIX + FILE_NAME))
-                .thenReturn(FILE_CONTENT.getBytes(StateQueries.FILE_ENCODING));
-
-        Response response = StateQueries.putFile(mockStateStore, null, formDataContentDisposition);
+        when(formDataContentDisposition.getFileName()).thenReturn(null);
+        Response response = StateQueries.putFile(null, null, formDataContentDisposition);
         assertEquals(400, response.getStatus());
-        assertEquals(StateQueries.NO_FILE_ERROR_MESSAGE, response.getEntity());
+        assertEquals(StateQueries.NO_FILENAME_ERROR_MESSAGE, response.getEntity());
     }
 
     @Test

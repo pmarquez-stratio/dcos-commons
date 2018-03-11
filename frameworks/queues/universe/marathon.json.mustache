@@ -4,7 +4,7 @@
   "mem": 1024,
   "instances": 1,
   "user": "{{service.user}}",
-  "cmd": "export LD_LIBRARY_PATH=$MESOS_SANDBOX/libmesos-bundle/lib:$LD_LIBRARY_PATH; export MESOS_NATIVE_JAVA_LIBRARY=$(ls $MESOS_SANDBOX/libmesos-bundle/lib/libmesos-*.so); export JAVA_HOME=$(ls -d $MESOS_SANDBOX/jdk*/jre/); export JAVA_HOME=${JAVA_HOME%/}; export PATH=$(ls -d $JAVA_HOME/bin):$PATH && export JAVA_OPTS=\"-Xms256M -Xmx512M -XX:-HeapDumpOnOutOfMemoryError\" && ./bootstrap -resolve=false -template=false && ./queues-scheduler/bin/queues ./queues-scheduler/svc1.yml ./queues-scheduler/svc2.yml ./queues-scheduler/svc3.yml",
+  "cmd": "export LD_LIBRARY_PATH=$MESOS_SANDBOX/libmesos-bundle/lib:$LD_LIBRARY_PATH; export MESOS_NATIVE_JAVA_LIBRARY=$(ls $MESOS_SANDBOX/libmesos-bundle/lib/libmesos-*.so); export JAVA_HOME=$(ls -d $MESOS_SANDBOX/jdk*/jre/); export JAVA_HOME=${JAVA_HOME%/}; export PATH=$(ls -d $JAVA_HOME/bin):$PATH && export JAVA_OPTS=\"-Xms256M -Xmx512M -XX:-HeapDumpOnOutOfMemoryError\" && ./bootstrap -resolve=false -template=false && ./queues-scheduler/bin/queues",
   "labels": {
     "DCOS_COMMONS_API_VERSION": "v1",
     "DCOS_COMMONS_UNINSTALL": "true",
@@ -19,14 +19,27 @@
     "PACKAGE_VERSION": "{{package-version}}",
     "PACKAGE_BUILD_TIME_EPOCH_MS": "{{package-build-time-epoch-ms}}",
     "PACKAGE_BUILD_TIME_STR": "{{package-build-time-str}}",
-    "FRAMEWORK_NAME": "{{service.name}}",
-    "SLEEP_DURATION": "{{service.sleep}}",
-    "FRAMEWORK_USER": "{{service.user}}",
-    "FRAMEWORK_LOG_LEVEL": "{{service.log_level}}",
-    "MESOS_API_VERSION": "{{service.mesos_api_version}}",
 
-    "NODE_CPUS": "{{node.cpus}}",
-    "NODE_MEM": "{{node.mem}}",
+    "FRAMEWORK_NAME": "{{service.name}}",
+    "FRAMEWORK_USER": "{{service.user}}",
+    {{#service.service_account}}
+    "FRAMEWORK_PRINCIPAL": "{{service.service_account}}",
+    {{/service.service_account}}
+    {{#service.gpus_enabled}}
+    "FRAMEWORK_GPUS": "true",
+    {{/service.gpus_enabled}}
+    {{#service.prereserved_roles}}
+    "FRAMEWORK_PRERESERVED_ROLES": "{{service.prereserved_roles}}",
+    {{/service.prereserved_roles}}
+
+    {{#debug.custom_zookeeper}}
+    "FRAMEWORK_ZOOKEEPER": "{{debug.custom_zookeeper}}",
+    {{/debug.custom_zookeeper}}
+    {{#debug.web_url}}
+    "FRAMEWORK_WEB_URL": "{{debug.web_url}}",
+    {{/debug.web_url}}
+    "FRAMEWORK_LOG_LEVEL": "{{debug.log_level}}",
+    "MESOS_API_VERSION": "{{debug.mesos_api_version}}",
 
     "JAVA_URI": "{{resource.assets.uris.jre-tar-gz}}",
     "EXECUTOR_URI": "{{resource.assets.uris.executor-zip}}",

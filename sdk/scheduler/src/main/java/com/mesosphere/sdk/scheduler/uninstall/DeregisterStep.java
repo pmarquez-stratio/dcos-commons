@@ -6,7 +6,7 @@ import com.mesosphere.sdk.scheduler.plan.Status;
 import java.util.Optional;
 
 /**
- * Step which advertises that the framework has been deregistered.
+ * Step which advertises that the service has been deregistered.
  */
 public class DeregisterStep extends UninstallStep {
 
@@ -17,7 +17,7 @@ public class DeregisterStep extends UninstallStep {
     @Override
     public Optional<PodInstanceRequirement> start() {
         if (isPending()) {
-            logger.info("Setting framework deregistration state to Prepared");
+            logger.info("Setting service deregistration state to Prepared");
             setStatus(Status.PREPARED);
         }
 
@@ -29,7 +29,7 @@ public class DeregisterStep extends UninstallStep {
      * At this point, the overall {@code deploy} plan for uninstall should be complete.
      */
     public void setComplete() {
-        logger.info("Completed framework deregistration");
+        logger.info("Completed service deregistration");
         setStatus(Status.COMPLETE);
     }
 }

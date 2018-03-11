@@ -1,7 +1,6 @@
 package com.mesosphere.sdk.queues.scheduler;
 
 import com.mesosphere.sdk.curator.CuratorLocker;
-import com.mesosphere.sdk.curator.CuratorPersister;
 import com.mesosphere.sdk.framework.FrameworkConfig;
 import com.mesosphere.sdk.framework.FrameworkRunner;
 import com.mesosphere.sdk.scheduler.MesosEventClient;
@@ -10,8 +9,6 @@ import com.mesosphere.sdk.scheduler.SchedulerConfig;
 import com.mesosphere.sdk.scheduler.AbstractScheduler;
 import com.mesosphere.sdk.state.SchemaVersionStore;
 import com.mesosphere.sdk.storage.Persister;
-import com.mesosphere.sdk.storage.PersisterCache;
-import com.mesosphere.sdk.storage.PersisterException;
 
 /**
  * Sets up and executes a {@link FrameworkRunner} to which potentially multiple {@link AbstractScheduler}s may be added.
@@ -27,13 +24,17 @@ public class QueueRunner implements Runnable {
         private final SchedulerConfig schedulerConfig;
         private final FrameworkConfig frameworkConfig;
         private final MesosEventClient client;
-
-        private Persister persister;
+        private final Persister persister;
         private boolean usingGpus = false;
 
-        private Builder(SchedulerConfig schedulerConfig, FrameworkConfig frameworkConfig, MesosEventClient client) {
+        private Builder(
+                SchedulerConfig schedulerConfig,
+                FrameworkConfig frameworkConfig,
+                Persister persister,
+                MesosEventClient client) {
             this.schedulerConfig = schedulerConfig;
             this.frameworkConfig = frameworkConfig;
+            this.persister = persister;
             this.client = client;
         }
 
@@ -48,34 +49,9 @@ public class QueueRunner implements Runnable {
         }
 
         /**
-         * Overrides the persister to be used, intended for testing.
-         *
-         * @return {@code this}
-         */
-        public Builder setCustomPersister(Persister persister) {
-            this.persister = persister;
-            return this;
-        }
-
-        /**
          * Returns a new {@link QueueRunner} instance which may be launched with {@code run()}.
          */
         public QueueRunner build() {
-            if (persister == null) {
-                // Default: Curator persister
-                try {
-                    persister = CuratorPersister.newBuilder(
-                            frameworkConfig.getFrameworkName(), frameworkConfig.getZookeeperHostPort()).build();
-                    if (schedulerConfig.isStateCacheEnabled()) {
-                        persister = new PersisterCache(persister);
-                    }
-                } catch (PersisterException e) {
-                    throw new IllegalStateException(String.format(
-                            "Failed to initialize default persister at %s for framework %s",
-                            frameworkConfig.getZookeeperHostPort(), frameworkConfig.getFrameworkName()));
-                }
-            }
-
             // Lock curator before returning access to persister.
             CuratorLocker.lock(frameworkConfig.getFrameworkName(), frameworkConfig.getZookeeperHostPort());
             // Check and/or initialize schema version before doing any other storage access:
@@ -105,8 +81,9 @@ public class QueueRunner implements Runnable {
     public static Builder newBuilder(
             SchedulerConfig schedulerConfig,
             FrameworkConfig frameworkConfig,
+            Persister persister,
             MesosEventClient client) {
-        return new Builder(schedulerConfig, frameworkConfig, client);
+        return new Builder(schedulerConfig, frameworkConfig, persister, client);
     }
 
     /**
@@ -126,13 +103,6 @@ public class QueueRunner implements Runnable {
         this.persister = persister;
         this.client = client;
         this.usingGpus = usingGpus;
-    }
-
-    /**
-     * Returns the persister which should be passed to individual jobs.
-     */
-    public Persister getPersister() {
-        return persister;
     }
 
     /**

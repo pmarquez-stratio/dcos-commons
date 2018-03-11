@@ -111,7 +111,7 @@ public class ApiServer {
                     server.join();
                 } catch (Exception e) {
                     LOGGER.error(String.format("API server at port %d failed with exception: ", port), e);
-                    SchedulerUtils.hardExit(ExitCode.API_SERVER_ERROR);
+                    SchedulerUtils.hardExit(ExitCode.API_SERVER_ERROR, e);
                 } finally {
                     LOGGER.info("API server at port {} exiting", port);
                     try {

@@ -23,8 +23,9 @@ import com.mesosphere.sdk.offer.OfferRecommendation;
 import com.mesosphere.sdk.offer.OfferUtils;
 import com.mesosphere.sdk.offer.ResourceUtils;
 import com.mesosphere.sdk.offer.TaskException;
+import com.mesosphere.sdk.queues.generator.RunGenerator;
 import com.mesosphere.sdk.queues.http.endpoints.*;
-import com.mesosphere.sdk.scheduler.DefaultScheduler;
+import com.mesosphere.sdk.queues.http.types.RunInfoProvider;
 import com.mesosphere.sdk.scheduler.MesosEventClient;
 import com.mesosphere.sdk.scheduler.OfferResources;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
@@ -36,7 +37,6 @@ import com.mesosphere.sdk.scheduler.plan.Plan;
 import com.mesosphere.sdk.scheduler.plan.PlanManager;
 import com.mesosphere.sdk.scheduler.plan.strategy.SerialStrategy;
 import com.mesosphere.sdk.scheduler.uninstall.DeregisterStep;
-import com.mesosphere.sdk.scheduler.uninstall.UninstallScheduler;
 
 /**
  * Mesos client which wraps running runs, routing Mesos events to the appropriate runs.
@@ -57,18 +57,22 @@ public class QueueEventClient implements MesosEventClient {
 
     private static final Logger LOGGER = LoggingUtils.getLogger(QueueEventClient.class);
 
+
+    private final DefaultRunManager runManager;
+    private final Map<String, RunGenerator> runGenerators;
+    private final UninstallCallback uninstallCallback;
+
     private final DeregisterStep deregisterStep;
     private final Optional<Plan> uninstallPlan;
-    private final DefaultQueueInfoProvider runInfoProvider;
-    private final UninstallCallback uninstallCallback;
-    // Keeps track of whether we've had the registered callback yet.
-    // When a client is added, if we're already registered then invoke 'registered()' manually against that client
-    private boolean hasRegistered;
 
-    public QueueEventClient(SchedulerConfig schedulerConfig, UninstallCallback uninstallCallback) {
-        this.runInfoProvider = new DefaultQueueInfoProvider();
+    public QueueEventClient(
+            SchedulerConfig schedulerConfig,
+            DefaultRunManager runManager,
+            Map<String, RunGenerator> runGenerators,
+            UninstallCallback uninstallCallback) {
+        this.runManager = runManager;
+        this.runGenerators = runGenerators;
         this.uninstallCallback = uninstallCallback;
-        this.hasRegistered = false;
 
         if (schedulerConfig.isUninstallEnabled()) {
             this.deregisterStep = new DeregisterStep();
@@ -85,101 +89,9 @@ public class QueueEventClient implements MesosEventClient {
         }
     }
 
-    /**
-     * Adds a run which is mapped for the specified name. Note: If the run was marked for uninstall via
-     * {@link #uninstallRun(String)}, it should continue to be added across scheduler restarts in order for uninstall to
-     * complete. It should only be omitted after the uninstall callback has been invoked for it.
-     *
-     * @param run the client to add
-     * @return {@code this}
-     * @throws IllegalArgumentException if the run name is already present
-     */
-    public QueueEventClient putRun(AbstractScheduler run) {
-        Map<String, AbstractScheduler> runs = runInfoProvider.lockRW();
-        LOGGER.info("Adding service: {} (now {} services)", run.getName(), runs.size() + 1);
-        try {
-            // NOTE: If the run is uninstalling, it should already be passed to us as an UninstallScheduler.
-            // See SchedulerBuilder.
-            AbstractScheduler previousRun = runs.put(run.getName(), run);
-            if (previousRun != null) {
-                // Put the old client back before throwing...
-                runs.put(run.getName(), previousRun);
-                throw new IllegalArgumentException(
-                        String.format("Service named '%s' is already present", run.getName()));
-            }
-            if (hasRegistered) {
-                // We are already registered. Manually call registered() against this client so that it can initialize.
-                run.registered(false);
-            }
-            return this;
-        } finally {
-            runInfoProvider.unlockRW();
-        }
-    }
-
-    /**
-     * Triggers an uninstall for a run, removing it from the list of runs when it has finished. Does nothing if the run
-     * is already uninstalling. If the scheduler process is restarted, the run must be added again via {@link putRun},
-     * at which point it will automatically resume uninstalling.
-     *
-     * @param name the name of the run to be uninstalled
-     * @return {@code this}
-     * @throws IllegalArgumentException if the name does not exist
-     */
-    public QueueEventClient uninstallRun(String name) {
-        // UNINSTALL FLOW:
-        // 1. uninstallRun("foo") is called. This converts the run to an UninstallScheduler.
-        // 2. UninstallScheduler internally flags its StateStore with an uninstall bit if one is not already present.
-        // 3. The UninstallScheduler proceeds to clean up the service.
-        // 4. In the event of a scheduler process restart during cleanup:
-        //   a. Upstream builds a new foo using SchedulerBuilder, which internally finds the uninstall bit and returns a
-        //      new UninstallScheduler
-        //   b. putRun(foo) is called with the UninstallScheduler
-        //   c. The UninstallScheduler resumes cleanup from where it left off...
-        // 5. Sometime after the UninstallScheduler finishes cleanup, it returns FINISHED in response to offers.
-        // 6. We remove the run and invoke uninstallCallback.uninstalled(), telling upstream that it's gone. If upstream
-        //    invokes putRun(foo) again at this point, the run will be relaunched from scratch because the uninstall bit
-        //    in ZK will have been cleared.
-        Map<String, AbstractScheduler> runs = runInfoProvider.lockRW();
-        LOGGER.info("Marking service as uninstalling: {} (out of {} services)", name, runs.size());
-        try {
-            AbstractScheduler currentRun = runs.get(name);
-            if (currentRun == null) {
-                throw new IllegalArgumentException(String.format(
-                        "Service '%s' does not exist: nothing to uninstall", name));
-            }
-            if (currentRun instanceof UninstallScheduler) {
-                // Already uninstalling
-                LOGGER.warn("Told to uninstall service '{}', but it is already uninstalling", name);
-                return this;
-            }
-
-            // Convert the DefaultScheduler to an UninstallScheduler. It will automatically flag itself with an
-            // uninstall bit in its state store and then proceed with the uninstall. When the uninstall has completed,
-            // it will return FINISHED to its next offers() call, at which point we will remove it. If the scheduler
-            // process is restarted before uninstall has completed, the caller should have added it back via putRun().
-            // When it's added back, it should be have already been converted to an UninstallScheduler. See
-            // SchedulerBuilder.
-            runs.put(name, ((DefaultScheduler) currentRun).toUninstallScheduler());
-
-            return this;
-        } finally {
-            runInfoProvider.unlockRW();
-        }
-    }
-
     @Override
     public void registered(boolean reRegistered) {
-        // Take exclusive lock in order to lock against clients being added/removed (hasRegistered bit):
-        Collection<AbstractScheduler> runs = runInfoProvider.lockRW().values();
-        hasRegistered = true;
-        LOGGER.info("Notifying {} services of {}",
-                runs.size(), reRegistered ? "re-registration" : "initial registration");
-        try {
-            runs.stream().forEach(c -> c.registered(reRegistered));
-        } finally {
-            runInfoProvider.unlockRW();
-        }
+        runManager.registered(reRegistered);
     }
 
     @Override
@@ -204,7 +116,10 @@ public class QueueEventClient implements MesosEventClient {
      */
     @Override
     public OfferResponse offers(Collection<Protos.Offer> offers) {
-        boolean anyNotReady = false;
+        // If uninstalling, then finish uninstall. Otherwise decline short.
+        boolean noClients = false;
+        // Decline short.
+        boolean anyClientsNotReady = false;
 
         List<OfferRecommendation> recommendations = new ArrayList<>();
         List<Protos.Offer> remainingOffers = new ArrayList<>();
@@ -213,14 +128,15 @@ public class QueueEventClient implements MesosEventClient {
         Collection<String> finishedRuns = new ArrayList<>();
         Collection<String> uninstalledRuns = new ArrayList<>();
 
-        Collection<AbstractScheduler> runs = runInfoProvider.lockAllR();
+        Collection<AbstractScheduler> runs = runManager.lockAndGetRuns();
         LOGGER.info("Sending {} offer{} to {} service{}:",
                 offers.size(), offers.size() == 1 ? "" : "s",
                 runs.size(), runs.size() == 1 ? "" : "s");
         try {
             if (runs.isEmpty()) {
-                // If we don't have any clients, then WE aren't ready. Decline short.
-                anyNotReady = true;
+                // If we don't have any clients, then WE aren't ready.
+                // Decline short, or finish if there's an uninstall in progress.
+                noClients = true;
             }
             for (AbstractScheduler run : runs) {
                 OfferResponse response = run.offers(remainingOffers);
@@ -249,7 +165,7 @@ public class QueueEventClient implements MesosEventClient {
                 case NOT_READY:
                     // This client wasn't ready. Tell upstream to short-decline any remaining offers so that it can get
                     // another chance shortly.
-                    anyNotReady = true;
+                    anyClientsNotReady = true;
                     break;
                 case PROCESSED:
                     // No-op, keep going.
@@ -260,36 +176,21 @@ public class QueueEventClient implements MesosEventClient {
                 // This is done in case any of the clients depends on us to turn the crank periodically.
             }
         } finally {
-            runInfoProvider.unlockR();
+            runManager.unlockRuns();
         }
 
         if (!finishedRuns.isEmpty()) {
             LOGGER.info("Starting uninstall for {} service{}: {} (from {} total services)",
                     finishedRuns.size(), finishedRuns.size() == 1 ? "" : "s", finishedRuns);
-            for (String run : finishedRuns) {
-                // Switch run to UninstallScheduler.
-                // NOTE: Function grabs a lock internally, so we need to be unlocked when calling it here.
-                uninstallRun(run);
-            }
+            // Trigger uninstalls. Grabs a lock internally, so we need to be unlocked when calling it here.
+            runManager.uninstallRuns(finishedRuns);
         }
 
-        boolean allRemoved = false;
         if (!uninstalledRuns.isEmpty()) {
             // Note: It's possible that we can have a race where we attempt to remove the same run twice. This is fine.
             //       (Picture two near-simultaneous calls to offers(): Both send offers, both get FINISHED back, ...)
-            Map<String, AbstractScheduler> runsMap = runInfoProvider.lockRW();
-            LOGGER.info("Removing {} uninstalled service{}: {} (from {} total services)",
-                    uninstalledRuns.size(), uninstalledRuns.size() == 1 ? "" : "s", uninstalledRuns, runsMap.size());
-            try {
-                for (String run : uninstalledRuns) {
-                    runsMap.remove(run);
-                }
-                if (runsMap.isEmpty()) {
-                    allRemoved = true;
-                }
-            } finally {
-                runInfoProvider.unlockRW();
-            }
+            int remainingRunCount = runManager.removeRuns(uninstalledRuns);
+            noClients = remainingRunCount <= 0;
 
             // Just in case, avoid invoking the uninstall callback until we are in an unlocked state. This avoids
             // deadlock if the callback itself calls back into us for any reason. This also ensures that we aren't
@@ -299,7 +200,7 @@ public class QueueEventClient implements MesosEventClient {
             }
         }
 
-        if (allRemoved) {
+        if (noClients) {
             // We just removed the last client(s). Should the rest of the framework be torn down?
             if (uninstallPlan.isPresent()) {
                 // Yes: We're uninstalling everything and all runs have been cleaned up. Tell the caller that they can
@@ -310,7 +211,7 @@ public class QueueEventClient implements MesosEventClient {
                 // No: We're just not actively running anything. Decline short until we have runs.
                 return OfferResponse.notReady(recommendations);
             }
-        } else if (anyNotReady) {
+        } else if (anyClientsNotReady) {
             // One or more clients said they weren't ready, or we don't have any clients. Tell upstream to short-decline
             // the unused offers, but still perform any operations returned by the ready clients.
             return OfferResponse.notReady(recommendations);
@@ -375,7 +276,7 @@ public class QueueEventClient implements MesosEventClient {
             String serviceName = entry.getKey();
             Collection<OfferResources> serviceOffers = entry.getValue().values();
 
-            AbstractScheduler run = runInfoProvider.getRun(serviceName);
+            AbstractScheduler run = runManager.getRun(serviceName);
             if (run == null) {
                 // (CASE 2) Old or invalid service name. Consider all resources for this service as unexpected.
                 LOGGER.info("  {} cleanup result: unknown service, all resources unexpected", serviceName);
@@ -452,7 +353,7 @@ public class QueueEventClient implements MesosEventClient {
             return StatusResponse.unknownTask();
         }
 
-        AbstractScheduler run = runInfoProvider.getRun(serviceName.get());
+        AbstractScheduler run = runManager.getRun(serviceName.get());
         if (run == null) {
             // Unrecognized service. Status for old task?
             LOGGER.info("Received task status for unknown service {}: {}",
@@ -474,15 +375,16 @@ public class QueueEventClient implements MesosEventClient {
         Collection<PlanManager> planManagers = uninstallPlan.isPresent()
                 ? Collections.singletonList(DefaultPlanManager.createProceeding(uninstallPlan.get()))
                 : Collections.emptyList(); // ... any plans to show when running normally?
+        RunInfoProvider runInfoProvider = runManager.getRunInfoProvider();
         return Arrays.asList(
                 new HealthResource(planManagers),
                 new PlansResource(planManagers),
-                new QueueResource(runInfoProvider),
-                new QueueArtifactResource(runInfoProvider),
-                new QueueConfigResource(runInfoProvider),
-                new QueuePlansResource(runInfoProvider),
-                new QueuePodResource(runInfoProvider),
-                new QueueStateResource(runInfoProvider, new StringPropertyDeserializer()));
+                new QueueResource(runManager, runGenerators),
+                new RunArtifactResource(runInfoProvider),
+                new RunConfigResource(runInfoProvider),
+                new RunPlansResource(runInfoProvider),
+                new RunPodResource(runInfoProvider),
+                new RunStateResource(runInfoProvider, new StringPropertyDeserializer()));
     }
 
     /**

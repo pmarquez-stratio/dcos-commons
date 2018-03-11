@@ -2,7 +2,7 @@ package com.mesosphere.sdk.queues.http.endpoints;
 
 import com.mesosphere.sdk.http.queries.PlansQueries;
 import com.mesosphere.sdk.http.types.PrettyJsonResource;
-import com.mesosphere.sdk.queues.http.types.QueueInfoProvider;
+import com.mesosphere.sdk.queues.http.types.RunInfoProvider;
 import com.mesosphere.sdk.scheduler.plan.PlanCoordinator;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.GET;
@@ -19,15 +19,15 @@ import java.util.Optional;
 /**
  * API for management of Plan(s).
  */
-@Path("/v1/runs")
-public class QueuePlansResource extends PrettyJsonResource {
+@Path("/v1/run")
+public class RunPlansResource extends PrettyJsonResource {
 
-    private final QueueInfoProvider runInfoProvider;
+    private final RunInfoProvider runInfoProvider;
 
     /**
      * Creates a new instance which allows access to plans for runs in the provider.
      */
-    public QueuePlansResource(QueueInfoProvider runInfoProvider) {
+    public RunPlansResource(RunInfoProvider runInfoProvider) {
         this.runInfoProvider = runInfoProvider;
     }
 

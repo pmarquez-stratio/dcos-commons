@@ -9,19 +9,19 @@ import javax.ws.rs.core.Response;
 
 import com.mesosphere.sdk.http.queries.ConfigQueries;
 import com.mesosphere.sdk.http.types.PrettyJsonResource;
-import com.mesosphere.sdk.queues.http.types.QueueInfoProvider;
+import com.mesosphere.sdk.queues.http.types.RunInfoProvider;
 import com.mesosphere.sdk.specification.ServiceSpec;
 import com.mesosphere.sdk.state.ConfigStore;
 
 /**
  * A read-only API for accessing active and inactive configurations from persistent storage.
  */
-@Path("/v1/runs")
-public class QueueConfigResource extends PrettyJsonResource {
+@Path("/v1/run")
+public class RunConfigResource extends PrettyJsonResource {
 
-    private final QueueInfoProvider runInfoProvider;
+    private final RunInfoProvider runInfoProvider;
 
-    public QueueConfigResource(QueueInfoProvider runInfoProvider) {
+    public RunConfigResource(RunInfoProvider runInfoProvider) {
         this.runInfoProvider = runInfoProvider;
     }
 

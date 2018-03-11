@@ -17,6 +17,36 @@
           "default": "root",
           "title": "User"
         },
+        "service_account": {
+          "description": "The service account for DC/OS service authentication. This is typically left empty to use the default unless service authentication is needed. The value given here is passed as the principal of Mesos framework.",
+          "type": "string",
+          "default": ""
+        },
+        "gpus_enabled": {
+          "description": "Enable use of GPU resources",
+          "type": "boolean",
+          "default": false
+        },
+        "prereserved_roles": {
+          "description": "Comma-separated list of prereserved roles to register against with Mesos, such as 'slave_public'",
+          "type": "string",
+          "default": ""
+        }
+      },
+      "required": [
+        "name",
+        "user"
+      ]
+    },
+    "debug": {
+      "type": "object",
+      "description": "Debug options",
+      "properties": {
+        "custom_zookeeper": {
+          "description": "Configures a custom zookeeper host to use for storing persisted state, of the form 'host:port'",
+          "type": "string",
+          "default": ""
+        },
         "mesos_api_version": {
           "description": "Configures the Mesos API version to use. Possible values: V0 (non-HTTP), V1 (HTTP)",
           "type": "string",
@@ -41,39 +71,12 @@
           ],
           "default": "INFO"
         },
-        "sleep": {
-          "description": "The sleep duration in seconds before tasks exit.",
-          "type": "number",
-          "default": 1000
+        "web_url": {
+          "description": "A web URL to configure with Mesos",
+          "type": "string",
+          "default": ""
         }
-      },
-      "required": [
-        "name",
-        "sleep",
-        "user"
-      ]
-    },
-    "node": {
-      "description": "Queues pod configuration properties",
-      "type": "object",
-      "properties": {
-        "cpus": {
-          "title": "CPU count",
-          "description": "Queues pod CPU requirements",
-          "type": "number",
-          "default": 0.1
-        },
-        "mem": {
-          "title": "Memory size (MB)",
-          "description": "Queues pod mem requirements (in MB)",
-          "type": "integer",
-          "default": 252
-        }
-      },
-      "required": [
-        "cpus",
-        "mem"
-      ]
+      }
     }
   }
 }

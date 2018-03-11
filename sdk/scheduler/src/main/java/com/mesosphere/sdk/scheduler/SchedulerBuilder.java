@@ -237,7 +237,7 @@ public class SchedulerBuilder {
             return getDefaultScheduler(new FrameworkStore(persister), stateStore, configStore);
         } catch (ConfigStoreException e) {
             logger.error("Failed to construct scheduler.", e);
-            SchedulerUtils.hardExit(ExitCode.INITIALIZATION_FAILURE);
+            SchedulerUtils.hardExit(ExitCode.INITIALIZATION_FAILURE, e);
             return null; // This is so the compiler doesn't complain.  The scheduler is going down anyway.
         }
     }

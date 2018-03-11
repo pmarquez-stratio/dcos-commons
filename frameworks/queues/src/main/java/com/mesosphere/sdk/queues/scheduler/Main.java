@@ -1,16 +1,20 @@
 package com.mesosphere.sdk.queues.scheduler;
 
+import com.mesosphere.sdk.curator.CuratorPersister;
 import com.mesosphere.sdk.framework.FrameworkConfig;
-import com.mesosphere.sdk.queues.http.endpoints.QueueArtifactResource;
-import com.mesosphere.sdk.scheduler.DefaultScheduler;
+import com.mesosphere.sdk.queues.generator.RunGenerator;
+import com.mesosphere.sdk.queues.generator.SDKYamlGenerator;
 import com.mesosphere.sdk.scheduler.EnvStore;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
-import com.mesosphere.sdk.specification.DefaultServiceSpec;
-import com.mesosphere.sdk.specification.ServiceSpec;
-import com.mesosphere.sdk.specification.yaml.RawServiceSpec;
+import com.mesosphere.sdk.storage.Persister;
+import com.mesosphere.sdk.storage.PersisterCache;
+import com.mesosphere.sdk.storage.PersisterException;
 
 import java.io.File;
-import java.util.Arrays;
+import java.nio.file.Paths;
+import java.util.HashMap;
+import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,53 +26,53 @@ public class Main {
     private static final Logger LOGGER = LoggerFactory.getLogger(Main.class);
 
     public static void main(String[] args) throws Exception {
-        if (args.length == 0) {
-            throw new IllegalArgumentException("Expected at least one file argument, got: " + Arrays.toString(args));
-        }
-
         EnvStore envStore = EnvStore.fromEnv();
         SchedulerConfig schedulerConfig = SchedulerConfig.fromEnvStore(envStore);
         FrameworkConfig frameworkConfig = FrameworkConfig.fromEnvStore(envStore);
-        QueueEventClient client = new QueueEventClient(schedulerConfig, new QueueEventClient.UninstallCallback() {
+
+        Persister persister;
+        try {
+            persister = CuratorPersister.newBuilder(
+                    frameworkConfig.getFrameworkName(), frameworkConfig.getZookeeperHostPort()).build();
+            if (schedulerConfig.isStateCacheEnabled()) {
+                persister = new PersisterCache(persister);
+            }
+        } catch (PersisterException e) {
+            throw new IllegalStateException(String.format(
+                    "Failed to initialize default persister at %s for framework %s",
+                    frameworkConfig.getZookeeperHostPort(), frameworkConfig.getFrameworkName()));
+        }
+
+        DefaultRunManager runManager = new DefaultRunManager(new ActiveRunSet());
+
+        // Generators which will convert submitted payloads into ServiceSpecs
+        final Map<String, RunGenerator> runGenerators = new HashMap<>();
+        //runGenerators.put("spark", new SparkGenerator());
+        runGenerators.put("yaml", new SDKYamlGenerator(
+                schedulerConfig,
+                frameworkConfig,
+                persister,
+                // Config template path: just use current working directory
+                new File(Paths.get("").toAbsolutePath().toString())));
+
+        // Client which will receive events from mesos and forward them to active Runs
+        QueueEventClient client = new QueueEventClient(
+                schedulerConfig,
+                runManager,
+                runGenerators,
+                new QueueEventClient.UninstallCallback() {
             @Override
             public void uninstalled(String name) {
+                // TODO(nickbp): Remove run from storage
                 LOGGER.info("Job has completed uninstall: {}", name);
             }
         });
-
-        // First initialize the QueueRunner to get the (cached) persister that will be reused by individual jobs
-        // (within their own namespaces)
-        // Note: In practice, jobs would be added over HTTP after run() begins
-        QueueRunner.Builder runnerBuilder = QueueRunner.newBuilder(schedulerConfig, frameworkConfig, client);
+        QueueRunner.Builder queueRunnerBuilder =
+                QueueRunner.newBuilder(schedulerConfig, frameworkConfig, persister, client);
         // Need to tell Mesos up-front whether we want GPU resources:
         if (envStore.getOptionalBoolean("FRAMEWORK_GPUS", false)) {
-            runnerBuilder.enableGpus();
+            queueRunnerBuilder.enableGpus();
         }
-        QueueRunner queueRunner = runnerBuilder.build();
-
-        // Read jobs from provided files, and assume any config templates are in the same directory as the files:
-        for (int i = 0; i < args.length; ++i) {
-            LOGGER.info("Reading job from spec file: {}", args[i]);
-            File yamlSpecFile = new File(args[i]);
-            RawServiceSpec rawServiceSpec = RawServiceSpec.newBuilder(yamlSpecFile).build();
-            ServiceSpec serviceSpec =
-                    DefaultServiceSpec.newGenerator(rawServiceSpec, schedulerConfig, yamlSpecFile.getParentFile())
-                    .setMultiServiceFrameworkConfig(frameworkConfig)
-                    .build();
-            LOGGER.info("Adding job: {}", serviceSpec.getName());
-            client.putRun(DefaultScheduler.newBuilder(serviceSpec, schedulerConfig, queueRunner.getPersister())
-                    .setPlansFrom(rawServiceSpec)
-                    // Jobs-related customizations:
-                    // - In ZK, store data under "dcos-service-<fwkName>/Services/<jobName>"
-                    .setStorageNamespace(serviceSpec.getName())
-                    // - Config templates are served by JobsArtifactResource rather than default ArtifactResource
-                    .setTemplateUrlFactory(QueueArtifactResource.getUrlFactory(
-                            frameworkConfig.getFrameworkName(), serviceSpec.getName()))
-                    // If the service was previously marked for uninstall, it will be built as an UninstallScheduler
-                    .build());
-        }
-
-        // Now run the queue.
-        queueRunner.run();
+        queueRunnerBuilder.build().run();
     }
 }

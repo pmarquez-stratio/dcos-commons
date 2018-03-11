@@ -109,17 +109,46 @@ public final class TaskKiller {
         killTaskInternal(taskId);
     }
 
-    public static void update(Protos.TaskStatus taskStatus) {
-        if (isDead(taskStatus)) {
-            synchronized (LOCK) {
-                if (TASKS_TO_KILL.remove(taskStatus.getTaskId())) {
-                    LOGGER.info("Completed killing: {}, {} remaining tasks to kill: {}",
-                            taskStatus.getTaskId().getValue(),
-                            TASKS_TO_KILL.size(),
-                            TASKS_TO_KILL.stream().map(t -> t.getValue()).collect(Collectors.toList()));
-                } else {
-                    LOGGER.warn("Task was not scheduled for killing: {}", taskStatus.getTaskId().getValue());
-                }
+    /**
+     * Updates the list of tasks scheduled to be killed to reflect an incoming task status.
+     *
+     * Returns whether the task should be eligible for another kill operation. This is intended to break a
+     * Kill->Status->Kill->Status->... loop where Mesos returns TASK_LOST+REASON_RECONCILIATION when we attempt to kill
+     * an unknown task. Example loop:
+     *
+     * {@code
+     * TaskKiller:killTask: Enqueued kill of task: foo__node-0-node__d9e95ff5-caff-48a0-b26d-d6d2aabfd28e
+     * TaskKiller:killTaskInternal: Killing task: foo__node-0-node__d9e95ff5-caff-48a0-b26d-d6d2aabfd28e
+     * FrameworkScheduler:statusUpdate: Received status update for
+     *     taskId=foo__node-0-node__d9e95ff5-caff-48a0-b26d-d6d2aabfd28e
+     *     state=TASK_LOST
+     *     message=Reconciliation: Task is unknown
+     * TaskKiller:update: Completed killing: foo__node-0-node__d9e95ff5-caff-48a0-b26d-d6d2aabfd28e
+     * FrameworkScheduler:statusUpdate: Got unknown task in response to status update, marking task to be killed:
+     *     foo__node-0-node__d9e95ff5-caff-48a0-b26d-d6d2aabfd28e
+     * TaskKiller:killTask: Enqueued kill of task: foo__node-0-node__d9e95ff5-caff-48a0-b26d-d6d2aabfd28e
+     * }
+     *
+     * @param taskStatus the received task status
+     * @return whether the task for this status is eligible for another kill request
+     */
+    public static boolean update(Protos.TaskStatus taskStatus) {
+        if (!isDead(taskStatus)) {
+            // Task is not dead and can be killed.
+            return true;
+        }
+        synchronized (LOCK) {
+            if (TASKS_TO_KILL.remove(taskStatus.getTaskId())) {
+                LOGGER.info("Completed killing: {}, {} remaining tasks to kill: {}",
+                        taskStatus.getTaskId().getValue(),
+                        TASKS_TO_KILL.size(),
+                        TASKS_TO_KILL.stream().map(t -> t.getValue()).collect(Collectors.toList()));
+                // Task is dead AND was already marked. Refrain from killing again right away to avoid kill loop:
+                return false;
+            } else {
+                LOGGER.warn("Task was not scheduled for killing: {}", taskStatus.getTaskId().getValue());
+                // Task is dead but wasn't scheduled for killing. Scheduling it for a kill shouldn't hurt anything.
+                return true;
             }
         }
     }

@@ -114,7 +114,7 @@ public class FrameworkScheduler implements Scheduler {
         } catch (Exception e) {
             LOGGER.error(String.format(
                     "Unable to store registered framework ID '%s'", frameworkId.getValue()), e);
-            SchedulerUtils.hardExit(ExitCode.REGISTRATION_FAILURE);
+            SchedulerUtils.hardExit(ExitCode.REGISTRATION_FAILURE, e);
         }
 
         updateDriverAndDomain(driver, masterInfo);
@@ -155,12 +155,20 @@ public class FrameworkScheduler implements Scheduler {
                 TextFormat.shortDebugString(status));
         Metrics.record(status);
         StatusResponse response = mesosEventClient.status(status);
-        TaskKiller.update(status);
+        boolean eligibleToKill = TaskKiller.update(status);
         switch (response.result) {
         case UNKNOWN_TASK:
-            LOGGER.info("Got unknown task in response to status update, marking task to be killed: {}",
-                    status.getTaskId().getValue());
-            TaskKiller.killTask(status.getTaskId());
+            if (eligibleToKill) {
+                LOGGER.info("Got unknown task in response to status update, marking task to be killed: {}",
+                        status.getTaskId().getValue());
+                TaskKiller.killTask(status.getTaskId());
+            } else {
+                // Special case: Mesos can send TASK_LOST+REASON_RECONCILIATION as a response to a prior kill request
+                // against an unknown task. When this happens, we don't want to repeat the kill, because that would
+                // result create a Kill -> Status -> Kill -> ... loop
+                LOGGER.warn("Got unknown task in response to status update, but task should not be killed again: {}",
+                        status.getTaskId().getValue());
+            }
             break;
         case PROCESSED:
             // No-op

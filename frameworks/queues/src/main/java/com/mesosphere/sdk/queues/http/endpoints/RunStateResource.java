@@ -2,7 +2,7 @@ package com.mesosphere.sdk.queues.http.endpoints;
 
 import com.mesosphere.sdk.http.queries.StateQueries;
 import com.mesosphere.sdk.http.types.PropertyDeserializer;
-import com.mesosphere.sdk.queues.http.types.QueueInfoProvider;
+import com.mesosphere.sdk.queues.http.types.RunInfoProvider;
 import com.mesosphere.sdk.state.StateStore;
 import org.glassfish.jersey.media.multipart.FormDataContentDisposition;
 import org.glassfish.jersey.media.multipart.FormDataParam;
@@ -16,16 +16,16 @@ import java.util.Optional;
  * An API for reading task and frameworkId state from persistent storage, and resetting the state store cache if one is
  * being used.
  */
-@Path("/v1/runs")
-public class QueueStateResource {
+@Path("/v1/run")
+public class RunStateResource {
 
-    private final QueueInfoProvider runInfoProvider;
+    private final RunInfoProvider runInfoProvider;
     private final PropertyDeserializer propertyDeserializer;
 
     /**
      * Creates a new StateResource which returns content for runs in the provider.
      */
-    public QueueStateResource(QueueInfoProvider runInfoProvider, PropertyDeserializer propertyDeserializer) {
+    public RunStateResource(RunInfoProvider runInfoProvider, PropertyDeserializer propertyDeserializer) {
         this.runInfoProvider = runInfoProvider;
         this.propertyDeserializer = propertyDeserializer;
     }

@@ -104,7 +104,7 @@ class OfferProcessor {
                         processQueuedOffers();
                     } catch (Exception e) {
                         LOGGER.error("Error encountered when processing offers, exiting to avoid zombie state", e);
-                        SchedulerUtils.hardExit(ExitCode.ERROR);
+                        SchedulerUtils.hardExit(ExitCode.ERROR, e);
                     }
                 }
             });

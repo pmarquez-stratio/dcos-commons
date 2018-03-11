@@ -2,7 +2,7 @@ package com.mesosphere.sdk.queues.http.endpoints;
 
 import com.mesosphere.sdk.http.EndpointUtils;
 import com.mesosphere.sdk.http.queries.ArtifactQueries;
-import com.mesosphere.sdk.queues.http.types.QueueInfoProvider;
+import com.mesosphere.sdk.queues.http.types.RunInfoProvider;
 import com.mesosphere.sdk.specification.ServiceSpec;
 import com.mesosphere.sdk.state.ConfigStore;
 import javax.ws.rs.GET;
@@ -16,19 +16,19 @@ import java.util.UUID;
 /**
  * A read-only API for accessing file artifacts (e.g. config templates) for retrieval by pods.
  */
-@Path("/v1/runs")
-public class QueueArtifactResource {
+@Path("/v1/run")
+public class RunArtifactResource {
 
     private static final String RUN_ARTIFACT_URI_FORMAT = "http://%s/v1/runs/%s/artifacts/template/%s/%s/%s/%s";
 
-    private final QueueInfoProvider runInfoProvider;
+    private final RunInfoProvider runInfoProvider;
 
-    public QueueArtifactResource(QueueInfoProvider runInfoProvider) {
+    public RunArtifactResource(RunInfoProvider runInfoProvider) {
         this.runInfoProvider = runInfoProvider;
     }
 
     /**
-     * Returns a factory for schedulers which use {@link QueueArtifactResource}.
+     * Returns a factory for schedulers which use {@link RunArtifactResource}.
      *
      * @param frameworkName the name of the scheduler framework
      * @param serviceName the name of a run/service being managed by the scheduler

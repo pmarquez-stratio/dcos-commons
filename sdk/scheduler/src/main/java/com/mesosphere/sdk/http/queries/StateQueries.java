@@ -1,7 +1,9 @@
 package com.mesosphere.sdk.http.queries;
 
+import com.mesosphere.sdk.http.RequestUtils;
 import com.mesosphere.sdk.http.ResponseUtils;
 import com.mesosphere.sdk.http.types.PropertyDeserializer;
+import com.mesosphere.sdk.offer.LoggingUtils;
 import com.mesosphere.sdk.offer.TaskUtils;
 import com.mesosphere.sdk.state.FrameworkStore;
 import com.mesosphere.sdk.state.StateStore;
@@ -11,13 +13,11 @@ import com.mesosphere.sdk.storage.PersisterCache;
 import com.mesosphere.sdk.storage.PersisterException;
 import com.mesosphere.sdk.storage.StorageError.Reason;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.mesos.Protos;
 import org.glassfish.jersey.media.multipart.FormDataContentDisposition;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.core.Response;
 import java.io.*;
@@ -32,13 +32,12 @@ import java.util.stream.Collectors;
  */
 public class StateQueries {
 
-    private static final Logger logger = LoggerFactory.getLogger(StateQueries.class);
+    private static final Logger logger = LoggingUtils.getLogger(StateQueries.class);
 
     static final String FILE_NAME_PREFIX = "file-";
     static final Charset FILE_ENCODING = StandardCharsets.UTF_8;
-    static final int FILE_SIZE = 1024; // state store shouldn't be holding big files anyway...
-    static final String UPLOAD_TOO_BIG_ERROR_MESSAGE = "File size is restricted to " + FILE_SIZE + " bytes.";
-    static final String NO_FILE_ERROR_MESSAGE = "Only the first 1024 bytes of a file can be uploaded.";
+    static final int FILE_SIZE_LIMIT = 1024; // state store shouldn't be holding big files anyway...
+    static final String NO_FILENAME_ERROR_MESSAGE = "Missing filename metadata in Content-Disposition header";
 
     private StateQueries() {
         // do not instantiate
@@ -80,7 +79,7 @@ public class StateQueries {
             logger.info("Getting file {}", fileName);
             return ResponseUtils.plainOkResponse(getFileContent(stateStore, fileName));
         } catch (StateStoreException e) {
-            logger.error("Failed to get file {}: {}", fileName, e);
+            logger.error(String.format("Failed to get file %s", fileName), e);
             return ResponseUtils.plainResponse(
                     String.format("Failed to get the file"),
                     Response.Status.NOT_FOUND
@@ -93,6 +92,7 @@ public class StateQueries {
 
     /**
      * Endpoint for uploading arbitrary files of size up to 1024 Bytes.
+     *
      * @param uploadedInputStream The input stream containing the data.
      * @param fileDetails The details of the file to upload.
      * @return response indicating result of put operation.
@@ -101,20 +101,20 @@ public class StateQueries {
             StateStore stateStore, InputStream uploadedInputStream, FormDataContentDisposition fileDetails) {
         logger.info(fileDetails.toString());
         String fileName = fileDetails.getFileName();
-        if (uploadedInputStream == null || fileName == null) {
-            return ResponseUtils.plainResponse(NO_FILE_ERROR_MESSAGE, Response.Status.BAD_REQUEST);
+        if (fileName == null) {
+            return ResponseUtils.plainResponse(NO_FILENAME_ERROR_MESSAGE, Response.Status.BAD_REQUEST);
         }
-
-        if (fileDetails.getSize() > FILE_SIZE) {
-           return ResponseUtils.plainResponse(UPLOAD_TOO_BIG_ERROR_MESSAGE, Response.Status.BAD_REQUEST);
-        }
+        logger.info("Storing {}", fileName);
 
         try {
-            logger.info("Storing {}", fileName);
-            storeFile(stateStore, fileName, uploadedInputStream, fileDetails);
+            byte[] data = RequestUtils.readData(uploadedInputStream, fileDetails, FILE_SIZE_LIMIT);
+            stateStore.storeProperty(FILE_NAME_PREFIX + fileName, data);
             return Response.status(Response.Status.OK).build();
+        } catch (IllegalArgumentException e) {
+            // Size limit exceeded or other user input error
+            return ResponseUtils.plainResponse(e.getMessage(), Response.Status.BAD_REQUEST);
         } catch (StateStoreException | IOException e) {
-            logger.error("Failed to store file {}: {}", fileName, e);
+            logger.error(String.format("Failed to store file %s", fileName), e);
             return Response.serverError().build();
         }
     }
@@ -156,7 +156,7 @@ public class StateQueries {
         try {
             String zone = getZoneFromTaskNameAndIP(stateStore, podType, ip);
             if (zone.isEmpty()) {
-                logger.error("Failed to find a zone for pod type = %s, ip address = %s", podType, ip);
+                logger.error("Failed to find a zone for pod type = {}, ip address = {}", podType, ip);
                 return Response.status(Response.Status.NOT_FOUND).build();
             }
             return ResponseUtils.plainOkResponse(zone);
@@ -241,9 +241,10 @@ public class StateQueries {
 
     /**
      * Retrieves the contents of a file based on file name.
-     * @param stateStore The state store to get file content from.
-     * @param fileName The name of the file to retrieve.
-     * @return Contents of the file.
+     *
+     * @param stateStore The state store to get file content from
+     * @param fileName The name of the file to retrieve
+     * @return Contents of the file
      * @throws UnsupportedEncodingException
      */
     private static String getFileContent(StateStore stateStore, String fileName) throws UnsupportedEncodingException {
@@ -252,29 +253,11 @@ public class StateQueries {
     }
 
     /**
-     * Stores the file in the state store.
-     * @param stateStore The state store to store the file in.
-     * @param fileName The name of the file to store.
-     * @param uploadedInputStream The input stream holding the content of the file.
-     */
-    static void storeFile(
-            StateStore stateStore,
-            String fileName,
-            InputStream uploadedInputStream,
-            FormDataContentDisposition fileDetails) throws StateStoreException, IOException {
-        StringWriter writer = new StringWriter();
-        Reader reader = new InputStreamReader(uploadedInputStream, FILE_ENCODING);
-        // only copy the number of bytes the metadata specifies
-        IOUtils.copyLarge(reader, writer, 0, fileDetails.getSize());
-        fileName = FILE_NAME_PREFIX + fileName;
-        stateStore.storeProperty(fileName, writer.toString().getBytes(FILE_ENCODING));
-    }
-
-    /**
      * Gets the name of the files that are stored in the state store. The files stored in the state store are prefixed
      * with "file_".
-     * @param stateStore The state store to get files names from.
-     * @return The set of all file names stored.
+     *
+     * @param stateStore The state store to get files names from
+     * @return the set of all file names stored
      */
     static Collection<String> getFileNames(StateStore stateStore) {
         return stateStore.fetchPropertyKeys().stream()
@@ -285,8 +268,9 @@ public class StateQueries {
 
     /**
      * Constructs a map of task names to zones indicating in what zone the respective task name is in.
-     * @param stateStore The state store to get task infos from.
-     * @return Returns the map of task names to zones.
+     *
+     * @param stateStore The state store to get task infos from
+     * @return the map of task names to zones
      */
     private static Map<String, String> getTasksZones(StateStore stateStore) {
         Collection<String> taskNames = stateStore.fetchTaskNames();
@@ -302,10 +286,11 @@ public class StateQueries {
 
     /**
      * Gets the zone of a pod given its pod type and the IP address of the pod.
-     * @param stateStore The {@link StateStore} from which to get task info and task status from.
-     * @param podType The type of the pod to get zone information for.
-     * @param ipAddress The IP address of the pod to get zone information for.
-     * @return A string indicating the zone of the pod.
+     *
+     * @param stateStore The {@link StateStore} from which to get task info and task status from
+     * @param podType The type of the pod to get zone information for
+     * @param ipAddress The IP address of the pod to get zone information for
+     * @return A string indicating the zone of the pod
      */
     private static String getZoneFromTaskNameAndIP(StateStore stateStore, String podType, String ipAddress) {
         Collection<String> taskNames = stateStore.fetchTaskNames();

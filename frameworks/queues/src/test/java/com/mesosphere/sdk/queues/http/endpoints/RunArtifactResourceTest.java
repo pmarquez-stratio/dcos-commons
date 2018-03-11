@@ -6,7 +6,7 @@ import java.util.UUID;
 
 import org.junit.Test;
 
-public class QueueArtifactResourceTest {
+public class RunArtifactResourceTest {
 
     @Test
     public void testGetQueuesTemplateUrl() {
@@ -14,11 +14,11 @@ public class QueueArtifactResourceTest {
         assertEquals(
                 "http://api.fwk-name.marathon.l4lb.thisdcos.directory/v1/runs/job-name/artifacts/template/"
                         + uuid.toString() + "/some-pod/some-task/some-config",
-                QueueArtifactResource.getUrlFactory("fwk-name", "job-name").get(uuid, "some-pod", "some-task", "some-config"));
+                RunArtifactResource.getUrlFactory("fwk-name", "job-name").get(uuid, "some-pod", "some-task", "some-config"));
         assertEquals(
                 // TODO(nickbp): figure something out for slashes in job names, or just disallow them...
                 "http://api.pathtofwk-name.marathon.l4lb.thisdcos.directory/v1/runs//path/to/job-name/artifacts/template/"
                         + uuid.toString() + "/some-pod/some-task/some-config",
-                QueueArtifactResource.getUrlFactory("/path/to/fwk-name", "/path/to/job-name").get(uuid, "some-pod", "some-task", "some-config"));
+                RunArtifactResource.getUrlFactory("/path/to/fwk-name", "/path/to/job-name").get(uuid, "some-pod", "some-task", "some-config"));
     }
 }

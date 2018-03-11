@@ -16,29 +16,29 @@ import java.util.Collections;
 import java.util.UUID;
 
 /**
- * This class tests the {@link SpecStore}.
+ * This class tests the {@link RunStore}.
  */
 public class SpecStoreTest {
     private final Persister persister = new MemPersister();
 
-    private SpecStore specStore;
+    private RunStore specStore;
 
     @Before
     public void beforeEach() {
-        specStore = new SpecStore(persister);
+        specStore = new RunStore(persister);
     }
 
     @Test
     public void equalIds() throws ConfigStoreException {
-        UUID first = SpecStore.getId(getSpec());
-        UUID second = SpecStore.getId(getSpec());
+        UUID first = RunStore.getId(getSpec());
+        UUID second = RunStore.getId(getSpec());
         Assert.assertEquals(first, second);
     }
 
     @Test
     public void differentIds() throws ConfigStoreException {
-        UUID first = SpecStore.getId(getSpec());
-        UUID second = SpecStore.getId(getSpec("second"));
+        UUID first = RunStore.getId(getSpec());
+        UUID second = RunStore.getId(getSpec("second"));
         Assert.assertNotEquals(first, second);
     }
 

@@ -44,8 +44,8 @@ public class QueueRunnerTest {
         Persister persister = new MemPersister();
         persister.set("SchemaVersion", "123".getBytes(StandardCharsets.UTF_8));
 
-        QueueRunner.Builder runnerBuilder = QueueRunner.newBuilder(mockSchedulerConfig, mockFrameworkConfig, mockClient)
-                .setCustomPersister(persister);
+        QueueRunner.Builder runnerBuilder =
+                QueueRunner.newBuilder(mockSchedulerConfig, mockFrameworkConfig, persister, mockClient);
         try {
             runnerBuilder.build();
             Assert.fail("Expected exception due to bad schema version");
@@ -61,8 +61,6 @@ public class QueueRunnerTest {
         Persister persister = new MemPersister();
         persister.set("SchemaVersion", "2".getBytes(StandardCharsets.UTF_8));
 
-        QueueRunner.newBuilder(mockSchedulerConfig, mockFrameworkConfig, mockClient)
-                .setCustomPersister(persister)
-                .build();
+        QueueRunner.newBuilder(mockSchedulerConfig, mockFrameworkConfig, persister, mockClient).build();
     }
 }

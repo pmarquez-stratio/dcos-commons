@@ -12,12 +12,12 @@ import java.util.UUID;
 /**
  * This class maintains a deduplicated store of all job specifications.
  */
-public class SpecStore {
+public class RunStore {
     private static final String SPECS_ROOT_NAME = "Specs";
 
     private final ConfigStore<ServiceSpec> configStore;
 
-    public SpecStore(Persister persister) {
+    public RunStore(Persister persister) {
         this.configStore = new ConfigStore<ServiceSpec>(
                 DefaultServiceSpec.getConfigurationFactory(),
                 persister,
@@ -38,7 +38,7 @@ public class SpecStore {
     }
 
     static UUID getId(ServiceSpec serviceSpec) throws ConfigStoreException {
-        byte[] hash = SpecStore.hash(serviceSpec);
+        byte[] hash = RunStore.hash(serviceSpec);
         return UUID.nameUUIDFromBytes(hash);
     }
 

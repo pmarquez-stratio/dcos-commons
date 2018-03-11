@@ -104,6 +104,28 @@ public class FrameworkSchedulerTest {
         verify(mockSchedulerDriver).killTask(TestConstants.TASK_STATUS.getTaskId());
     }
 
+    @Test
+    public void testStatusUnknownTaskBreakLoop() {
+        Driver.setDriver(mockSchedulerDriver);
+        Protos.TaskStatus taskStatus = getStatus(Protos.TaskState.TASK_RUNNING);
+        when(mockMesosEventClient.status(any())).thenReturn(StatusResponse.unknownTask());
+
+        // Task is unknown by us and gets killed:
+        scheduler.statusUpdate(mockSchedulerDriver, taskStatus);
+        verify(mockSchedulerDriver, times(1)).killTask(taskStatus.getTaskId());
+
+        // Task is also unknown to Mesos, so it now gives us a TASK_LOST status.
+        // This time, we do NOT kill again because it was scheduled to be killed already. This avoids a kill loop:
+        taskStatus = getStatus(Protos.TaskState.TASK_LOST);
+        scheduler.statusUpdate(mockSchedulerDriver, taskStatus);
+        verify(mockSchedulerDriver, times(1)).killTask(taskStatus.getTaskId());
+
+        // Later on we get another status for this task, but since it wasn't scheduled to be killed, we try killing it:
+        taskStatus = getStatus(Protos.TaskState.TASK_LOST);
+        scheduler.statusUpdate(mockSchedulerDriver, taskStatus);
+        verify(mockSchedulerDriver, times(2)).killTask(taskStatus.getTaskId());
+    }
+
     private static void verifyDomainIsSet(Protos.DomainInfo expectedDomain) {
         // Infer the configured domain via a placement rule invocation
         Protos.Offer offerWithExpectedDomain = getOffer().toBuilder().setDomain(expectedDomain).build();
@@ -121,6 +143,12 @@ public class FrameworkSchedulerTest {
                 .setFrameworkId(TestConstants.FRAMEWORK_ID)
                 .setSlaveId(TestConstants.AGENT_ID)
                 .setHostname(TestConstants.HOSTNAME)
+                .build();
+    }
+
+    private static Protos.TaskStatus getStatus(Protos.TaskState state) {
+        return TestConstants.TASK_STATUS.toBuilder()
+                .setState(state)
                 .build();
     }
 }

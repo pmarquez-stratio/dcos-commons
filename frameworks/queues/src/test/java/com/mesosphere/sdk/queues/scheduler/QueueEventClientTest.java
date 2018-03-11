@@ -19,7 +19,6 @@ import com.mesosphere.sdk.offer.ReserveOfferRecommendation;
 import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
 import com.mesosphere.sdk.scheduler.MesosEventClient.StatusResponse;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
-import com.mesosphere.sdk.scheduler.uninstall.UninstallScheduler;
 
 import static org.mockito.Mockito.*;
 
@@ -79,10 +78,11 @@ public class QueueEventClientTest {
     @Mock private DefaultScheduler mockClient7;
     @Mock private DefaultScheduler mockClient8;
     @Mock private DefaultScheduler mockClient9;
-    @Mock private UninstallScheduler mockUninstallClient;
     @Mock private SchedulerConfig mockSchedulerConfig;
+    @Mock private DefaultRunManager mockRunManager;
     @Mock private QueueEventClient.UninstallCallback mockUninstallCallback;
 
+    //private DefaultRunManager runManager;
     private QueueEventClient client;
 
     @Before
@@ -97,35 +97,26 @@ public class QueueEventClientTest {
         when(mockClient7.getName()).thenReturn("7");
         when(mockClient8.getName()).thenReturn("8");
         when(mockClient9.getName()).thenReturn("9");
-        client = new QueueEventClient(mockSchedulerConfig, mockUninstallCallback);
+        client = new QueueEventClient(
+                mockSchedulerConfig, mockRunManager, Collections.emptyMap(), mockUninstallCallback);
     }
 
     @Test
-    public void putClientsDuplicate() {
-        client.putRun(mockClient1);
-        client.putRun(mockClient2);
-        try {
-            client.putRun(mockClient2);
-            Assert.fail("Expected exception: duplicate key");
-        } catch (IllegalArgumentException e) {
-            // expected
-        }
-    }
+    public void offerNoClientsUninstalling() {
+        // Tell client that it's doing an uninstall:
+        when(mockSchedulerConfig.isUninstallEnabled()).thenReturn(true);
+        client = new QueueEventClient(
+                mockSchedulerConfig, mockRunManager, Collections.emptyMap(), mockUninstallCallback);
 
-    @Test
-    public void putClientsRegistration() {
-        client.putRun(mockClient1);
-        client.registered(false);
-        verify(mockClient1).registered(false);
-        client.putRun(mockClient2);
-        // Should have been called automatically due to already being registered:
-        verify(mockClient2).registered(false);
-        try {
-            client.putRun(mockClient2);
-            Assert.fail("Expected exception: duplicate key");
-        } catch (IllegalArgumentException e) {
-            // expected
-        }
+        // No offers
+        OfferResponse response = client.offers(Collections.emptyList());
+        Assert.assertEquals(OfferResponse.Result.UNINSTALLED, response.result);
+        Assert.assertTrue(response.recommendations.isEmpty());
+
+        // Some offers
+        response = client.offers(Arrays.asList(getOffer(1), getOffer(2), getOffer(3)));
+        Assert.assertEquals(OfferResponse.Result.UNINSTALLED, response.result);
+        Assert.assertTrue(response.recommendations.isEmpty());
     }
 
     @Test
@@ -142,57 +133,77 @@ public class QueueEventClientTest {
     }
 
     @Test
-    public void uninstallRequestedClient() {
-        when(mockClient1.toUninstallScheduler()).thenReturn(mockUninstallClient);
-        when(mockUninstallClient.offers(any())).thenReturn(OfferResponse.uninstalled());
-        when(mockUninstallClient.getName()).thenReturn("1");
-        client.putRun(mockClient1);
-        client.uninstallRun("1");
-        client.uninstallRun("1"); // no-op
+    public void clientRemoval() {
+        when(mockRunManager.lockAndGetRuns()).thenReturn(Collections.singleton(mockClient1));
 
-        verifyZeroInteractions(mockUninstallCallback);
+        // client is done, expect uninstall trigger:
+        when(mockClient1.offers(any())).thenReturn(OfferResponse.finished());
         client.offers(Collections.emptyList());
-        verify(mockUninstallCallback).uninstalled("1");
+        verify(mockRunManager).uninstallRuns(Collections.singletonList("1"));
+        verifyZeroInteractions(mockUninstallCallback);
 
-        try {
-            // Should fail since the client was removed from the map:
-            client.uninstallRun("1");
-            Assert.fail("Expected exception");
-        } catch (IllegalArgumentException e) {
-            // expected
-        }
+        // client is uninstalled, expect removal:
+        when(mockClient1.offers(any())).thenReturn(OfferResponse.uninstalled());
+        // tell queue that this was the last client:
+        when(mockRunManager.removeRuns(any())).thenReturn(0);
+
+        // schedulerConfig is not uninstalling, so we're just NOT_READY:
+        OfferResponse response = client.offers(Collections.emptyList());
+        Assert.assertEquals(OfferResponse.Result.NOT_READY, response.result);
+        Assert.assertTrue(response.recommendations.isEmpty());
+
+        verify(mockRunManager).removeRuns(Collections.singletonList("1"));
+        verify(mockUninstallCallback).uninstalled("1");
     }
 
     @Test
-    public void uninstallFinishedClient() {
-        when(mockClient1.toUninstallScheduler()).thenReturn(mockUninstallClient);
+    public void clientRemovalDuringUninstall() {
+        when(mockSchedulerConfig.isUninstallEnabled()).thenReturn(true);
+        client = new QueueEventClient(
+                mockSchedulerConfig, mockRunManager, Collections.emptyMap(), mockUninstallCallback);
+
+        when(mockRunManager.lockAndGetRuns()).thenReturn(Collections.singleton(mockClient1));
+
+        // client is done, expect uninstall trigger:
         when(mockClient1.offers(any())).thenReturn(OfferResponse.finished());
-        client.putRun(mockClient1);
-
-        // mockClient1 is converted to mockUninstallClient:
         client.offers(Collections.emptyList());
-        verify(mockClient1).toUninstallScheduler();
-
-        // mockUninstallClient is removed:
-        when(mockUninstallClient.offers(any())).thenReturn(OfferResponse.uninstalled());
-        when(mockUninstallClient.getName()).thenReturn("hello");
-
+        verify(mockRunManager).uninstallRuns(Collections.singletonList("1"));
         verifyZeroInteractions(mockUninstallCallback);
-        client.offers(Collections.emptyList());
-        verify(mockUninstallCallback).uninstalled("hello");
+
+        // client is uninstalled, expect removal:
+        when(mockClient1.offers(any())).thenReturn(OfferResponse.uninstalled());
+        // tell queue that this was the last client:
+        when(mockRunManager.removeRuns(any())).thenReturn(0);
+
+        // schedulerConfig is uninstalling, so we're UNINSTALLED:
+        OfferResponse response = client.offers(Collections.emptyList());
+        Assert.assertEquals(OfferResponse.Result.UNINSTALLED, response.result);
+        Assert.assertTrue(response.recommendations.isEmpty());
+
+        verify(mockRunManager).removeRuns(Collections.singletonList("1"));
+        verify(mockUninstallCallback).uninstalled("1");
     }
 
     @Test
     public void finishedAndUninstalled() {
+        // 1,3: Finished uninstall, remove.
+        // 2,4: Finished normal run, switch to uninstall.
         when(mockClient1.offers(any())).thenReturn(OfferResponse.uninstalled());
         when(mockClient2.offers(any())).thenReturn(OfferResponse.finished());
         when(mockClient3.offers(any())).thenReturn(OfferResponse.uninstalled());
         when(mockClient4.offers(any())).thenReturn(OfferResponse.finished());
-        client
-                .putRun(mockClient1)
-                .putRun(mockClient2)
-                .putRun(mockClient3)
-                .putRun(mockClient4);
+        when(mockRunManager.lockAndGetRuns()).thenReturn(Arrays.asList(
+                mockClient1, mockClient2, mockClient3, mockClient4));
+
+        client.offers(Collections.emptyList());
+
+        // As uninstalled clients are removed, upstream is notified via callback:
+        verify(mockRunManager).removeRuns(Arrays.asList("1", "3"));
+        verify(mockUninstallCallback).uninstalled("1");
+        verify(mockUninstallCallback).uninstalled("3");
+
+        // Uninstall triggered for finished clients:
+        verify(mockRunManager).uninstallRuns(Arrays.asList("2", "4"));
     }
 
     @Test
@@ -209,16 +220,10 @@ public class QueueEventClientTest {
         when(mockClient7.offers(any())).then(CONSUME_FIRST_OFFER);
         when(mockClient8.offers(any())).then(CONSUME_LAST_OFFER);
         when(mockClient9.offers(any())).then(NO_CHANGES);
-        client
-                .putRun(mockClient1)
-                .putRun(mockClient2)
-                .putRun(mockClient3)
-                .putRun(mockClient4)
-                .putRun(mockClient5)
-                .putRun(mockClient6)
-                .putRun(mockClient7)
-                .putRun(mockClient8)
-                .putRun(mockClient9);
+        when(mockRunManager.lockAndGetRuns()).thenReturn(Arrays.asList(
+                mockClient1, mockClient2, mockClient3,
+                mockClient4, mockClient5, mockClient6,
+                mockClient7, mockClient8, mockClient9));
 
         // Empty offers: All clients should have been pinged regardless
         OfferResponse response = client.offers(Collections.emptyList());
@@ -275,10 +280,8 @@ public class QueueEventClientTest {
         when(mockClient1.offers(any())).then(NO_CHANGES);
         when(mockClient2.offers(any())).then(OFFER_NOT_READY);
         when(mockClient3.offers(any())).then(NO_CHANGES);
-        client
-                .putRun(mockClient1)
-                .putRun(mockClient2)
-                .putRun(mockClient3);
+        when(mockRunManager.lockAndGetRuns()).thenReturn(Arrays.asList(
+                mockClient1, mockClient2, mockClient3));
 
         // Empty offers: All clients should have been pinged regardless
         OfferResponse response = client.offers(Collections.emptyList());
@@ -299,39 +302,34 @@ public class QueueEventClientTest {
     }
 
     @Test
-    public void statusUnknown() {
-        // Client 2: unknown task, Clients 1 and 3: no interaction
-        when(mockClient2.status(any())).thenReturn(StatusResponse.unknownTask());
-        client
-                .putRun(mockClient1)
-                .putRun(mockClient2)
-                .putRun(mockClient3);
+    public void statusClientNotFound() {
+        when(mockRunManager.getRun("2")).thenReturn(null);
 
-        Protos.TaskStatus status = getStatus("2");
+        Protos.TaskStatus status = buildStatus("2");
         Assert.assertEquals(StatusResponse.Result.UNKNOWN_TASK, client.status(status).result);
-        verify(mockClient1, never()).status(any());
+        verify(mockRunManager, times(1)).getRun("2");
+    }
+
+    @Test
+    public void statusUnknown() {
+        // Client 2: unknown task
+        when(mockClient2.status(any())).thenReturn(StatusResponse.unknownTask());
+        when(mockRunManager.getRun("2")).thenReturn(mockClient2);
+
+        Protos.TaskStatus status = buildStatus("2");
+        Assert.assertEquals(StatusResponse.Result.UNKNOWN_TASK, client.status(status).result);
         verify(mockClient2, times(1)).status(status);
-        verify(mockClient3, never()).status(any());
     }
 
     @Test
     public void statusProcessed() {
-        when(mockClient1.status(any())).thenReturn(StatusResponse.unknownTask());
-        when(mockClient2.status(any())).thenReturn(StatusResponse.unknownTask());
+        // Client 3: status processed
         when(mockClient3.status(any())).thenReturn(StatusResponse.processed());
-        when(mockClient4.status(any())).thenReturn(StatusResponse.unknownTask());
-        client
-                .putRun(mockClient1)
-                .putRun(mockClient2)
-                .putRun(mockClient3)
-                .putRun(mockClient4);
+        when(mockRunManager.getRun("3")).thenReturn(mockClient3);
 
-        Protos.TaskStatus status = getStatus("3");
+        Protos.TaskStatus status = buildStatus("3");
         Assert.assertEquals(StatusResponse.Result.PROCESSED, client.status(status).result);
-        verify(mockClient1, never()).status(any());
-        verify(mockClient2, never()).status(any());
         verify(mockClient3, times(1)).status(status);
-        verify(mockClient4, never()).status(any());
     }
 
     @SuppressWarnings("deprecation")
@@ -344,7 +342,7 @@ public class QueueEventClientTest {
         return resBuilder.build();
     }
 
-    private static Protos.TaskStatus getStatus(String clientName) {
+    private static Protos.TaskStatus buildStatus(String clientName) {
         return Protos.TaskStatus.newBuilder()
                 .setTaskId(CommonIdUtils.toTaskId(clientName, "foo"))
                 .setState(TaskState.TASK_FINISHED)

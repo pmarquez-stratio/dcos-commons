@@ -48,9 +48,20 @@ public class SchedulerUtils {
      */
     @SuppressWarnings("DM_EXIT")
     public static void hardExit(ExitCode errorCode) {
-        String message = String.format("Scheduler exiting immediately with code: %d", errorCode.getValue());
+        String message =
+                String.format("Scheduler exiting immediately with code: %s[%d]", errorCode, errorCode.getValue());
         System.err.println(message);
         System.out.println(message);
         System.exit(errorCode.getValue());
+    }
+
+    /**
+     * Similar to {@link #hardExit(ExitCode)}, except also prints the stack trace of the provided exception before
+     * exiting the process. This may be used in contexts where the process is exiting in response to a thrown exception.
+     */
+    public static void hardExit(ExitCode errorCode, Throwable e) {
+        e.printStackTrace(System.err);
+        e.printStackTrace(System.out);
+        hardExit(errorCode);
     }
 }
