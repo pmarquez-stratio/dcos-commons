@@ -17,7 +17,6 @@ public class DeregisterStep extends UninstallStep {
     @Override
     public Optional<PodInstanceRequirement> start() {
         if (isPending()) {
-            logger.info("Setting service deregistration state to Prepared");
             setStatus(Status.PREPARED);
         }
 
@@ -29,7 +28,6 @@ public class DeregisterStep extends UninstallStep {
      * At this point, the overall {@code deploy} plan for uninstall should be complete.
      */
     public void setComplete() {
-        logger.info("Completed service deregistration");
         setStatus(Status.COMPLETE);
     }
 }

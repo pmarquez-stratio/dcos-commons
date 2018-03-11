@@ -123,9 +123,6 @@ public class PersisterUtils {
     /**
      * Deletes all data in the provided persister, or does nothing if the persister is already empty.
      */
-    /**
-     * Clears the root service node, leaving just the root node behind.
-     */
     public static void clearAllData(Persister persister) throws PersisterException {
         try {
             persister.recursiveDelete(PersisterUtils.PATH_DELIM_STR);

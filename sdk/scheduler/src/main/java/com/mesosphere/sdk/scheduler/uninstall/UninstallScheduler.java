@@ -134,8 +134,13 @@ public class UninstallScheduler extends AbstractScheduler {
         if (deregisterStubStep.isRunning()) {
             // The service resources have been deleted and all that's left is the final deregister operation. After we
             // return finished(), upstream will finish the uninstall by doing one of the following:
-            // - Mono-service: Upstream will stop/remove the framework, then unregistered() will be called.
+            // - Single-service: Upstream will stop/remove the framework, then unregistered() will be called.
             // - Multi-service: Upstream will remove us from the list of services without calling unregistered().
+
+            // In a multi-service case, we still need to delete our own namespaced data. Meanwhile in the single-service
+            // case the per-service data is wiped with the rest of the framework.
+            stateStore.deleteAllDataIfNamespaced();
+
             return OfferResponse.uninstalled();
         } else {
             // No recommendations. Upstream should invoke the cleaner against any unexpected resources in unclaimed

@@ -303,8 +303,10 @@ class OfferProcessor {
      */
     private void destroyFramework() {
         // Wipe all data from ZK. This includes the framework ID, which is used to detect across restarts that the
-        // framework has been destroyed.
-        LOGGER.info("Deleting state store...");
+        // framework has been destroyed. This is technically redundant in the single-service case, as the service would
+        // have cleared all ZK data when wiping its StateStore. However this is still needed in the multi-service case,
+        // where per-service data is within a separate subdirectory.
+        LOGGER.info("Deleting all persisted data...");
         try {
             PersisterUtils.clearAllData(persister);
         } catch (PersisterException e) {
@@ -325,7 +327,7 @@ class OfferProcessor {
         LOGGER.info("### UNINSTALL IS COMPLETE! ###");
         LOGGER.info("Scheduler should be cleaned up shortly...");
 
-        // Notify the client that deregistration has completed, following them giving us a FINISHED response to offers.
+        // Notify the client that deregistration has completed, following them giving us an UNINSTALLED response.
         // They can then set their "deploy" plan to Complete, which will in turn let Cosmos know that this scheduler
         // process can be pruned from Marathon.
         mesosEventClient.unregistered();

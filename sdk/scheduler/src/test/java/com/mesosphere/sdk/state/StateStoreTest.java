@@ -540,6 +540,31 @@ public class StateStoreTest {
         store.storeStatus(TestConstants.TASK_NAME, status);
     }
 
+    @Test
+    public void testDeleteDataIfNamespaced_notNamespaced() {
+        store.storeStatus(TestConstants.TASK_NAME, TestConstants.TASK_STATUS);
+        store.deleteAllDataIfNamespaced();
+
+        // no change because it's not namespaced:
+        Assert.assertTrue(store.fetchStatus(TestConstants.TASK_NAME).isPresent());
+    }
+
+    @Test
+    public void testDeleteDataIfNamespaced_isNamespaced() {
+        StateStore store2 = new StateStore(persister, NAMESPACE + "-two");
+        store2.storeStatus(TestConstants.TASK_NAME, TestConstants.TASK_STATUS);
+
+        store = new StateStore(persister, NAMESPACE);
+        store.storeStatus(TestConstants.TASK_NAME, TestConstants.TASK_STATUS);
+        store.deleteAllDataIfNamespaced();
+
+        // this namespace is deleted:
+        Assert.assertFalse(store.fetchStatus(TestConstants.TASK_NAME).isPresent());
+
+        // the other namespace is not deleted:
+        Assert.assertTrue(store2.fetchStatus(TestConstants.TASK_NAME).isPresent());
+    }
+
     private static Collection<Protos.TaskInfo> createTasks(String... taskNames) {
         List<Protos.TaskInfo> taskInfos = new ArrayList<>();
         for (String taskName : taskNames) {

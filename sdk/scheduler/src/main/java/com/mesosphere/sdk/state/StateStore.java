@@ -446,6 +446,25 @@ public class StateStore {
         }
     }
 
+    /**
+     * Deletes all data in the state store, but only if it's under a namespace. This is used to clear a namespaced
+     * service's data when it's being removed from a multi-service system.
+     */
+    public void deleteAllDataIfNamespaced() {
+        if (namespace.isEmpty()) {
+            return;
+        }
+        try {
+            persister.recursiveDelete(PersisterUtils.join(NAMESPACE_ROOT_NAME, namespace));
+        } catch (PersisterException e) {
+            if (e.getReason() == Reason.NOT_FOUND) {
+                // Nothing to delete, apparently. Treat as a no-op
+            } else {
+                throw new StateStoreException(e);
+            }
+        }
+    }
+
     private GoalStateOverride parseOverrideName(String taskName, byte[] nameBytes) throws StateStoreException {
         String overrideName = new String(nameBytes, StandardCharsets.UTF_8);
         for (GoalStateOverride override : GoalStateOverride.values()) {
