@@ -3,6 +3,7 @@ package com.mesosphere.sdk.queues.scheduler;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeSet;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -36,12 +37,12 @@ public class ActiveRunSet {
     }
 
     /**
-     * Returns the specified run, or {@code null} if it's not found.
+     * Returns the specified run, or an empty {@link Optional} if it's not found.
      */
-    public AbstractScheduler getRun(String runName) {
+    public Optional<AbstractScheduler> getRun(String runName) {
         lockR();
         try {
-            return runs.get(runName);
+            return Optional.ofNullable(runs.get(runName));
         } finally {
             unlockR();
         }

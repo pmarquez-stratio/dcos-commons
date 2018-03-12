@@ -2,17 +2,26 @@ package com.mesosphere.sdk.storage;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
+import com.mesosphere.sdk.state.StateStore;
 import com.mesosphere.sdk.storage.StorageError.Reason;
 
 /**
  * Utilities relating to usage of {@link Persister}s.
  */
 public class PersisterUtils {
+
+    /**
+     * Path used for per-service namespaces in upstream storage.
+     *
+     * Service-namespaced data is stored under "Services/[namespace]/..."
+     */
+    private static final String SERVICE_NAMESPACE_ROOT_NAME = "Services";
 
     private PersisterUtils() {
         // do not instantiate
@@ -27,6 +36,52 @@ public class PersisterUtils {
      * String representation of {@link #PATH_DELIM}.
      */
     public static final String PATH_DELIM_STR = String.valueOf(PATH_DELIM);
+
+
+    /**
+     * Returns all {@link StateStore} namespaces listed in the provided {@link Persister}, or an empty collection if
+     * none could be found.
+     *
+     * @param persister the persister to be scanned
+     * @throws PersisterException if there's a storage error other than data not found
+     */
+    public static Collection<String> fetchServiceNamespaces(Persister persister) throws PersisterException {
+        try {
+            return persister.getChildren(SERVICE_NAMESPACE_ROOT_NAME);
+        } catch (PersisterException e) {
+            if (e.getReason() == Reason.NOT_FOUND) {
+                // Persister currently lacks namespace storage.
+                return Collections.emptySet();
+            } else {
+                throw e;
+            }
+        }
+    }
+
+    /**
+     * Returns the root path for the provided namespace.
+     *
+     * @param namespace the namespace to use
+     * @throws IllegalArgumentException if the provided namespace is an empty string
+     * @return {@code Services/[namespace]}
+     */
+    public static String getServiceNamespacedRoot(String namespace) {
+        if (namespace.isEmpty()) {
+            throw new IllegalArgumentException("Expected non-empty namespace");
+        }
+        return join(SERVICE_NAMESPACE_ROOT_NAME, namespace);
+    }
+
+    /**
+     * Returns a namespaced path or non-namespaced path, depending on the provided namespace value.
+     *
+     * @param namespace the namespace to use, or an empty string if no namespace is applicable
+     * @param pathName the path to be namespaced (or not)
+     * @return {@code Services/[namespace]/pathName}, or {@code pathName}
+     */
+    public static String getServiceNamespacedRootPath(String namespace, String pathName) {
+        return namespace.isEmpty() ? pathName : join(getServiceNamespacedRoot(namespace), pathName);
+    }
 
     /**
      * Combines the provided path elements into a unified path, autocorrecting for any delimiters within the elements.

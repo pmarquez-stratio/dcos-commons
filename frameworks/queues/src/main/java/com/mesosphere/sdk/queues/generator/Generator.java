@@ -5,7 +5,7 @@ import com.mesosphere.sdk.scheduler.AbstractScheduler;
 /**
  * Converts HTTP payloads to constructed services.
  */
-public interface RunGenerator {
+public interface Generator {
 
     /**
      * Given the provided raw data sent in an HTTP request, constructs and returns a service object which will execute

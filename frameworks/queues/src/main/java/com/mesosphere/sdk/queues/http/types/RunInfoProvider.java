@@ -24,23 +24,23 @@ public class RunInfoProvider {
      * Returns the {@link StateStore} for the specified run, or an empty {@link Optional} if the run was not found.
      */
     public Optional<StateStore> getStateStore(String runName) {
-        AbstractScheduler scheduler = store.getRun(runName);
-        return scheduler == null ? Optional.empty() : Optional.of(scheduler.getStateStore());
+        Optional<AbstractScheduler> scheduler = store.getRun(runName);
+        return scheduler.isPresent() ? Optional.of(scheduler.get().getStateStore()) : Optional.empty();
     }
 
     /**
      * Returns the {@link ConfigStore} for the specified run, or an empty {@link Optional} if the run was not found.
      */
     public Optional<ConfigStore<ServiceSpec>> getConfigStore(String runName) {
-        AbstractScheduler scheduler = store.getRun(runName);
-        return scheduler == null ? Optional.empty() : Optional.of(scheduler.getConfigStore());
+        Optional<AbstractScheduler> scheduler = store.getRun(runName);
+        return scheduler.isPresent() ? Optional.of(scheduler.get().getConfigStore()) : Optional.empty();
     }
 
     /**
      * Returns the {@link PlanCoordinator} for the specified run, or an empty {@link Optional} if the run was not found.
      */
     public Optional<PlanCoordinator> getPlanCoordinator(String runName) {
-        AbstractScheduler scheduler = store.getRun(runName);
-        return scheduler == null ? Optional.empty() : Optional.of(scheduler.getPlanCoordinator());
+        Optional<AbstractScheduler> scheduler = store.getRun(runName);
+        return scheduler.isPresent() ? Optional.of(scheduler.get().getPlanCoordinator()) : Optional.empty();
     }
 }

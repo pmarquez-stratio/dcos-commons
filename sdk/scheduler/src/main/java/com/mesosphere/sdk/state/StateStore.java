@@ -54,7 +54,6 @@ public class StateStore {
     private static final String TASK_GOAL_OVERRIDE_PATH_NAME = "goal-state-override";
     private static final String TASK_GOAL_OVERRIDE_STATUS_PATH_NAME = "override-status";
 
-    private static final String NAMESPACE_ROOT_NAME = "Services";
     private static final String PROPERTIES_ROOT_NAME = "Properties";
     private static final String TASKS_ROOT_NAME = "Tasks";
 
@@ -182,7 +181,8 @@ public class StateStore {
     public Collection<String> fetchTaskNames() throws StateStoreException {
         try {
             Collection<String> taskNames = new ArrayList<>();
-            taskNames.addAll(persister.getChildren(getRootPath(namespace, TASKS_ROOT_NAME)));
+            taskNames.addAll(persister.getChildren(
+                    PersisterUtils.getServiceNamespacedRootPath(namespace, TASKS_ROOT_NAME)));
             return taskNames;
         } catch (PersisterException e) {
             if (e.getReason() == Reason.NOT_FOUND) {
@@ -330,6 +330,30 @@ public class StateStore {
     }
 
     /**
+     * Stores multiple key/value pairs atomically.
+     *
+     * @param properties mapping of keys to values
+     * @throws StateStoreException if the key or value fail validation, or if storing the data otherwise fails
+     * @see StateStore#validateKey(String)
+     * @see StateStore#validateValue(byte[])
+     */
+    public void storeProperties(Map<String, byte[]> properties) throws StateStoreException {
+        // Validate values and map paths for each entry, as we would in storeProperty()
+        Map<String, byte[]> propertiesWithFixedPaths = new HashMap<>();
+        for (Map.Entry<String, byte[]> entry : properties.entrySet()) {
+            validateKey(entry.getKey());
+            validateValue(entry.getValue());
+            propertiesWithFixedPaths.put(getPropertyPath(namespace, entry.getKey()), entry.getValue());
+        }
+        try {
+            logger.debug("Storing properties: {}", propertiesWithFixedPaths.keySet());
+            persister.setMany(propertiesWithFixedPaths);
+        } catch (PersisterException e) {
+            throw new StateStoreException(e);
+        }
+    }
+
+    /**
      * Fetches the value byte array, stored against the Property {@code key}, or throws an error if no matching {@code
      * key} is found.
      *
@@ -355,7 +379,7 @@ public class StateStore {
      */
     public Collection<String> fetchPropertyKeys() throws StateStoreException {
         try {
-            return persister.getChildren(getRootPath(namespace, PROPERTIES_ROOT_NAME));
+            return persister.getChildren(PersisterUtils.getServiceNamespacedRootPath(namespace, PROPERTIES_ROOT_NAME));
         } catch (PersisterException e) {
             if (e.getReason() == Reason.NOT_FOUND) {
                 // Root path doesn't exist yet. Treat as an empty list of properties. This scenario is
@@ -452,10 +476,11 @@ public class StateStore {
      */
     public void deleteAllDataIfNamespaced() {
         if (namespace.isEmpty()) {
-            return;
+            return; // Not namespaced, no-op
         }
         try {
-            persister.recursiveDelete(PersisterUtils.join(NAMESPACE_ROOT_NAME, namespace));
+            // Delete data WITHIN THE NAMESPACE
+            persister.recursiveDelete(PersisterUtils.getServiceNamespacedRoot(namespace));
         } catch (PersisterException e) {
             if (e.getReason() == Reason.NOT_FOUND) {
                 // Nothing to delete, apparently. Treat as a no-op
@@ -498,44 +523,53 @@ public class StateStore {
 
     // Internals
 
+    /**
+     * @return Services/[namespace]/Tasks/[taskName]/TaskInfo, or Tasks/[taskName]/TaskInfo
+     */
     protected static String getTaskInfoPath(String namespace, String taskName) {
         return PersisterUtils.join(getTaskPath(namespace, taskName), TASK_INFO_PATH_NAME);
     }
 
+    /**
+     * @return Services/[namespace]/Tasks/[taskName]/TaskStatus, or Tasks/[taskName]/TaskStatus
+     */
     protected static String getTaskStatusPath(String namespace, String taskName) {
         return PersisterUtils.join(getTaskPath(namespace, taskName), TASK_STATUS_PATH_NAME);
     }
 
+    /**
+     * @return Services/[namespace]/Tasks/[taskName]/Metadata/goal-state-override, or
+     *         Tasks/[taskName]/Metadata/goal-state-override
+     */
     protected static String getGoalOverridePath(String namespace, String taskName) {
         return PersisterUtils.join(
                 PersisterUtils.join(getTaskPath(namespace, taskName), TASK_METADATA_PATH_NAME),
                 TASK_GOAL_OVERRIDE_PATH_NAME);
     }
 
+    /**
+     * @return Services/[namespace]/Tasks/[taskName]/Metadata/override-status, or
+     *         Tasks/[taskName]/Metadata/override-status
+     */
     protected static String getGoalOverrideStatusPath(String namespace, String taskName) {
         return PersisterUtils.join(
                 PersisterUtils.join(getTaskPath(namespace, taskName), TASK_METADATA_PATH_NAME),
                 TASK_GOAL_OVERRIDE_STATUS_PATH_NAME);
     }
 
+    /**
+     * @return Services/[namespace]/Tasks/[taskName], or Tasks/[taskName]
+     */
     protected static String getTaskPath(String namespace, String taskName) {
-        return PersisterUtils.join(getRootPath(namespace, TASKS_ROOT_NAME), taskName);
-    }
-
-    protected static String getPropertyPath(String namespace, String propertyName) {
-        return PersisterUtils.join(getRootPath(namespace, PROPERTIES_ROOT_NAME), propertyName);
+        return PersisterUtils.join(PersisterUtils.getServiceNamespacedRootPath(namespace, TASKS_ROOT_NAME), taskName);
     }
 
     /**
-     * Returns the provided {@code pathName} within the provided {@code namespace}.
-     *
-     * @param namespace The namespace, or an empty string for no/global namespace
-     * @param pathName The path within at root of the persister
-     * @return The namespaced path for {@code pathName}
+     * @return Services/[namespace]/Properties/[propertyName], or Properties/[propertyName]
      */
-    protected static String getRootPath(String namespace, String pathName) {
-        return namespace.isEmpty() ? pathName :
-            PersisterUtils.join(NAMESPACE_ROOT_NAME, PersisterUtils.join(namespace, pathName));
+    protected static String getPropertyPath(String namespace, String propertyName) {
+        return PersisterUtils.join(
+                PersisterUtils.getServiceNamespacedRootPath(namespace, PROPERTIES_ROOT_NAME), propertyName);
     }
 
     private static void validateKey(String key) throws StateStoreException {

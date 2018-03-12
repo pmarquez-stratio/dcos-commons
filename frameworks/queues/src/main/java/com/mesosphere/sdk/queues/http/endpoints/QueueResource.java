@@ -3,12 +3,16 @@ package com.mesosphere.sdk.queues.http.endpoints;
 import com.mesosphere.sdk.http.RequestUtils;
 import com.mesosphere.sdk.http.ResponseUtils;
 import com.mesosphere.sdk.offer.LoggingUtils;
-import com.mesosphere.sdk.queues.generator.RunGenerator;
+import com.mesosphere.sdk.queues.generator.Generator;
 import com.mesosphere.sdk.queues.http.types.RunManager;
+import com.mesosphere.sdk.queues.state.SpecStore;
 import com.mesosphere.sdk.scheduler.AbstractScheduler;
+import com.mesosphere.sdk.scheduler.uninstall.UninstallScheduler;
+import com.mesosphere.sdk.state.StateStoreException;
 
 import java.io.InputStream;
 import java.util.Map;
+import java.util.Optional;
 
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
@@ -19,7 +23,6 @@ import javax.ws.rs.PathParam;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
-import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.media.multipart.FormDataContentDisposition;
 import org.glassfish.jersey.media.multipart.FormDataParam;
 import org.json.JSONArray;
@@ -34,12 +37,34 @@ public class QueueResource {
 
     private static final Logger logger = LoggingUtils.getLogger(QueueResource.class);
 
+    private final SpecStore specStore;
     private final RunManager runManager;
-    private final Map<String, RunGenerator> runGenerators;
+    private final Map<String, Generator> generators;
+    private final Optional<String> defaultSpecType;
 
-    public QueueResource(RunManager runManager, Map<String, RunGenerator> specGenerators) {
+    /**
+     * Returns a new QueueResource instance which serves endpoints for managing the queue.
+     *
+     * @param specStore the spec store which contains submitted specs for active and scheduled runs
+     * @param runManager the manager of active runs
+     * @param generators one or more generators for converting submitted specs to running services based on type
+     * @param defaultSpecType an optional default spec type to be used if no type is specified in a request,
+     *     or an empty optional if the type must always be provided
+     */
+    public QueueResource(
+            SpecStore specStore,
+            RunManager runManager,
+            Map<String, Generator> generators,
+            Optional<String> defaultSpecType) {
+        this.specStore = specStore;
         this.runManager = runManager;
-        this.runGenerators = specGenerators;
+        this.generators = generators;
+        this.defaultSpecType = defaultSpecType;
+        if (defaultSpecType.isPresent() && !generators.containsKey(defaultSpecType.get())) {
+            throw new IllegalArgumentException(String.format(
+                    "Default spec type %s is not present in the generator types: %s",
+                    defaultSpecType.get(), generators.keySet()));
+        }
     }
 
     /**
@@ -47,7 +72,30 @@ public class QueueResource {
      */
     @GET
     public Response getRuns() {
-        return ResponseUtils.jsonOkResponse(new JSONArray(runManager.getRunNames()));
+        JSONArray runs = new JSONArray();
+        for (String runName : runManager.getRunNames()) {
+            JSONObject run = new JSONObject();
+            run.put("name", runName);
+
+            // Try to get the scheduler, then the run id from the scheduler:
+            Optional<AbstractScheduler> scheduler = runManager.getRun(runName);
+            // Technically, the scheduler could disappear if it's uninstalled while we iterate over runNames.
+            if (!scheduler.isPresent()) {
+                continue;
+            }
+            // Goal state
+            run.put("goal", scheduler.get().getServiceSpec().getGoal().toString());
+            // Spec id (should be retrievable, but just in case...)
+            Optional<String> specId = specStore.getSpecId(scheduler.get());
+            if (specId.isPresent()) {
+                run.put("spec-id", specId.get());
+            }
+            // Detect uninstall-in-progress by class type
+            run.put("uninstall", scheduler.get() instanceof UninstallScheduler);
+
+            runs.put(run);
+        }
+        return ResponseUtils.jsonOkResponse(runs);
     }
 
     /**
@@ -76,26 +124,18 @@ public class QueueResource {
             @FormDataParam("type") String type,
             @FormDataParam("file") InputStream uploadedInputStream,
             @FormDataParam("file") FormDataContentDisposition fileDetails) {
+        // Use default type if applicable
+        if (type == null && defaultSpecType.isPresent()) {
+            type = defaultSpecType.get();
+        }
+
         // Select the matching generator.
-        final RunGenerator runGenerator;
-        if (StringUtils.isEmpty(type)) {
-            if (runGenerators.size() == 1) {
-                // If no type is specified and we only support one type of run, then use that type.
-                runGenerator = runGenerators.values().iterator().next();
-            } else {
-                // More than one type available. Type parameter is required.
-                return ResponseUtils.plainResponse(
-                        String.format("Missing 'type' parameter. Must be one of: %s", runGenerators.keySet()),
-                        Response.Status.BAD_REQUEST);
-            }
-        } else {
-            runGenerator = runGenerators.get(type);
-            if (runGenerator == null) {
-                // Bad type.
-                return ResponseUtils.plainResponse(
-                        String.format("Invalid 'type' value '%s'. Must be one of: %s", type, runGenerators.keySet()),
-                        Response.Status.BAD_REQUEST);
-            }
+        final Generator runGenerator = generators.get(type);
+        if (runGenerator == null) {
+            // Bad type.
+            return ResponseUtils.plainResponse(
+                    String.format("Invalid 'type' value '%s'. Must be one of: %s", type, generators.keySet()),
+                    Response.Status.BAD_REQUEST);
         }
 
         // Extract the data payload.
@@ -114,6 +154,9 @@ public class QueueResource {
         AbstractScheduler run;
         try {
             run = runGenerator.generate(data);
+            // Service was generated successfully. Store the data we used to perform the generation, so that we can
+            // restore this service if we are later restarted.
+            specStore.store(run.getStateStore(), data, type);
         } catch (Exception e) {
             logger.error("Failed to generate service", e);
             return ResponseUtils.plainResponse(
@@ -121,16 +164,21 @@ public class QueueResource {
                     Response.Status.BAD_REQUEST);
         }
 
-        // TODO(nickbp): At this point, store the payload so that it can be re-added after a restart
-
         try {
             runManager.putRun(run);
             JSONObject obj = new JSONObject();
-            obj.put("name", run.getName());
+            obj.put("name", run.getServiceSpec().getName());
             return ResponseUtils.jsonOkResponse(obj);
         } catch (Exception e) {
-            // TODO(nickbp): Remove the run from the above storage here
-            logger.error("Failed to add run", e);
+            logger.error(String.format("Failed to add run %s", run.getServiceSpec().getName()), e);
+            try {
+                // Wipe the data that we just added against this service
+                run.getStateStore().deleteAllDataIfNamespaced();
+            } catch (StateStoreException e2) {
+                logger.error(
+                        String.format("Failed to clear service data for failed run %s", run.getServiceSpec().getName()),
+                        e2);
+            }
             return ResponseUtils.plainResponse(
                     String.format("Failed to add run: %s", e.getMessage()), Response.Status.BAD_REQUEST);
         }

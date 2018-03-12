@@ -1,5 +1,7 @@
 #!/bin/bash
 
+SERVICE_NAME=${SERVICE_NAME:-queues}
+
 read -r -d '' SPEC_TEMPLATE <<EOF
 name: SVCNAME
 pods:
@@ -14,14 +16,15 @@ pods:
 EOF
 
 runCurl() {
-    echo "$1 $2 ..." 1>&2
+    echo "Slow CLI..."
     TOKEN="Authorization: token=$(dcos config show core.dcos_acs_token)"
-    URL=$(dcos config show core.dcos_url)/service/queues${2}
+    URL=$(dcos config show core.dcos_url)/service/${SERVICE_NAME}${2}
+    echo "$1 $2 ..." 1>&2
     if [ -n "$3" ]; then
         # "@-" = read from stdin
-        (set -o xtrace; echo "$3" | time curl -F 'file=@-' -F 'type=yaml' -X $1 -H "$TOKEN" $URL)
+        (set -o xtrace; echo "$3" | curl -F 'file=@-' -F 'type=yaml' -X $1 -H "$TOKEN" $URL)
     else
-        (set -o xtrace; time curl -X $1 -H "$TOKEN" $URL)
+        (set -o xtrace; curl -X $1 -H "$TOKEN" $URL)
     fi
     echo
 }

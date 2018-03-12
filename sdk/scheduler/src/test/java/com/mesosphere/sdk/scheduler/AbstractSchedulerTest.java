@@ -29,10 +29,11 @@ import com.mesosphere.sdk.testutils.TestConstants;
 /**
  * Tests for {@link AbstractScheduler}.
  */
-public class ServiceSchedulerTest {
+public class AbstractSchedulerTest {
 
     private StateStore stateStore;
 
+    @Mock private ServiceSpec mockServiceSpec;
     @Mock private SchedulerDriver mockSchedulerDriver;
     @Mock private SecretsClient mockSecretsClient;
     @Mock private PlanCoordinator mockPlanCoordinator;
@@ -90,7 +91,7 @@ public class ServiceSchedulerTest {
     private class TestScheduler extends AbstractScheduler {
 
         protected TestScheduler(StateStore stateStore) {
-            super("test-svc",  stateStore, Optional.empty());
+            super(mockServiceSpec, stateStore, Optional.empty());
             when(mockPlanCoordinator.getPlanManagers()).thenReturn(Collections.emptyList());
             when(mockPlanCoordinator.getCandidates()).thenReturn(Collections.emptyList());
         }

@@ -71,7 +71,8 @@ public class RequestUtils {
     }
 
     /**
-     * Reads the content of the provided payload, enforcing the specified size limit, while being permissive about what
+     * Reads the content of the provided payload, enforcing the specified size limit, while being permissive/dismissive
+     * about provided Content-Length in the header metadata.
      *
      * @param inputStream The input stream containing the data
      * @param fileDetails The HTTP header details of the stream

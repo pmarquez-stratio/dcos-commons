@@ -3,6 +3,7 @@ package com.mesosphere.sdk.queues.scheduler;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Optional;
 
 import org.slf4j.Logger;
 
@@ -54,16 +55,17 @@ public class DefaultRunManager implements RunManager {
     @Override
     public DefaultRunManager putRun(AbstractScheduler run) {
         Map<String, AbstractScheduler> runs = activeRunSet.lockRW();
-        LOGGER.info("Adding service: {} (now {} services)", run.getName(), runs.size() + 1);
+        String runServiceName = run.getServiceSpec().getName();
+        LOGGER.info("Adding service: {} (now {} services)", runServiceName, runs.size() + 1);
         try {
             // NOTE: If the run is uninstalling, it should already be passed to us as an UninstallScheduler.
             // See SchedulerBuilder.
-            AbstractScheduler previousRun = runs.put(run.getName(), run);
+            AbstractScheduler previousRun = runs.put(runServiceName, run);
             if (previousRun != null) {
                 // Put the old client back before throwing...
-                runs.put(run.getName(), previousRun);
+                runs.put(runServiceName, previousRun);
                 throw new IllegalArgumentException(
-                        String.format("Service named '%s' is already present", run.getName()));
+                        String.format("Service named '%s' is already present", runServiceName));
             }
             if (isRegistered) {
                 // We are already registered. Manually call registered() against this client so that it can initialize.
@@ -73,6 +75,14 @@ public class DefaultRunManager implements RunManager {
         } finally {
             activeRunSet.unlockRW();
         }
+    }
+
+    /**
+     * Returns the specified run, or an empty {@code Optional} if it's not found.
+     */
+    @Override
+    public Optional<AbstractScheduler> getRun(String runName) {
+        return activeRunSet.getRun(runName);
     }
 
     /**
@@ -96,13 +106,6 @@ public class DefaultRunManager implements RunManager {
      */
     public RunInfoProvider getRunInfoProvider() {
         return new RunInfoProvider(activeRunSet);
-    }
-
-    /**
-     * Returns the specified run, or {@code null} if it's not found.
-     */
-    public AbstractScheduler getRun(String runName) {
-        return activeRunSet.getRun(runName);
     }
 
     /**

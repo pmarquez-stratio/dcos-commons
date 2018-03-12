@@ -14,11 +14,15 @@ import org.mockito.MockitoAnnotations;
 
 import com.mesosphere.sdk.scheduler.DefaultScheduler;
 import com.mesosphere.sdk.scheduler.uninstall.UninstallScheduler;
+import com.mesosphere.sdk.specification.ServiceSpec;
 
 public class DefaultRunManagerTest {
 
+    @Mock private ServiceSpec mockServiceSpec1;
+    @Mock private ServiceSpec mockServiceSpec2;
     @Mock private DefaultScheduler mockClient1;
     @Mock private DefaultScheduler mockClient2;
+    @Mock private ServiceSpec mockUninstallServiceSpec;
     @Mock private UninstallScheduler mockUninstallClient;
 
     private DefaultRunManager runManager;
@@ -26,8 +30,10 @@ public class DefaultRunManagerTest {
     @Before
     public void beforeEach() {
         MockitoAnnotations.initMocks(this);
-        when(mockClient1.getName()).thenReturn("1");
-        when(mockClient2.getName()).thenReturn("2");
+        when(mockClient1.getServiceSpec()).thenReturn(mockServiceSpec1);
+        when(mockClient2.getServiceSpec()).thenReturn(mockServiceSpec2);
+        when(mockServiceSpec1.getName()).thenReturn("1");
+        when(mockServiceSpec2.getName()).thenReturn("2");
         runManager = new DefaultRunManager(new ActiveRunSet());
     }
 
@@ -62,7 +68,8 @@ public class DefaultRunManagerTest {
     @Test
     public void uninstallRequestedClient() {
         when(mockClient1.toUninstallScheduler()).thenReturn(mockUninstallClient);
-        when(mockUninstallClient.getName()).thenReturn("1");
+        when(mockUninstallClient.getServiceSpec()).thenReturn(mockUninstallServiceSpec);
+        when(mockUninstallServiceSpec.getName()).thenReturn("1");
         runManager.putRun(mockClient1);
         // 2 and second 1 are ignored:
         runManager.uninstallRuns(Arrays.asList("1", "1", "2"));

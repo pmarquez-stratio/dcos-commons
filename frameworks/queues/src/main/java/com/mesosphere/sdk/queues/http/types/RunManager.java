@@ -1,6 +1,7 @@
 package com.mesosphere.sdk.queues.http.types;
 
 import java.util.Collection;
+import java.util.Optional;
 
 import com.mesosphere.sdk.scheduler.AbstractScheduler;
 
@@ -24,6 +25,11 @@ public interface RunManager {
      * @throws IllegalArgumentException if the run name is already present
      */
     public RunManager putRun(AbstractScheduler scheduler);
+
+    /**
+     * Returns the specified run, or an empty {@code Optional} if it's not found.
+     */
+    public Optional<AbstractScheduler> getRun(String runName);
 
     /**
      * Triggers uninstall of the specified run. After uninstall is complete, it should be removed using

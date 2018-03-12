@@ -36,7 +36,6 @@ public class DefaultScheduler extends AbstractScheduler {
 
     private final Logger logger;
     private final SchedulerConfig schedulerConfig;
-    private final ServiceSpec serviceSpec;
     private final FrameworkStore frameworkStore;
     private final ConfigStore<ServiceSpec> configStore;
     private final PlanCoordinator planCoordinator;
@@ -82,9 +81,8 @@ public class DefaultScheduler extends AbstractScheduler {
             ConfigStore<ServiceSpec> configStore,
             ArtifactQueries.TemplateUrlFactory templateUrlFactory,
             Map<String, EndpointProducer> customEndpointProducers) throws ConfigStoreException {
-        super(serviceSpec.getName(), stateStore, planCustomizer);
+        super(serviceSpec, stateStore, planCustomizer);
         this.schedulerConfig = schedulerConfig;
-        this.serviceSpec = serviceSpec;
         this.logger = LoggingUtils.getLogger(getClass(), serviceSpec.getName());
         this.frameworkStore = frameworkStore;
         this.configStore = configStore;

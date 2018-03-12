@@ -29,8 +29,6 @@ public class ConfigStore<T extends Configuration> implements ConfigTargetStore {
 
     private static final Logger logger = LoggingUtils.getLogger(ConfigStore.class);
 
-    private static final String NAMESPACE_ROOT_NAME = "Services";
-
     private static final String TARGET_ID_PATH_NAME = "ConfigTarget";
     private static final String CONFIGURATIONS_PATH_NAME = "Configurations";
 
@@ -234,27 +232,24 @@ public class ConfigStore<T extends Configuration> implements ConfigTargetStore {
         }
     }
 
+    /**
+     * @return {@code Services/[namespace]/ConfigTarget}, or {@code ConfigTarget}
+     */
     private static String getTargetIdPath(String namespace) {
-        return getRootPath(namespace, TARGET_ID_PATH_NAME);
+        return PersisterUtils.getServiceNamespacedRootPath(namespace, TARGET_ID_PATH_NAME);
     }
 
+    /**
+     * @return {@code Services/[namespace]/Configurations/[id]}, or {@code Configurations/[id]}
+     */
     private static String getConfigPath(String namespace, UUID id) {
         return PersisterUtils.join(getConfigsPath(namespace), id.toString());
     }
 
-    private static String getConfigsPath(String namespace) {
-        return getRootPath(namespace, CONFIGURATIONS_PATH_NAME);
-    }
-
     /**
-     * Returns the provided {@code pathName} within the provided {@code namespace}.
-     *
-     * @param namespace The namespace, or an empty string for no/global namespace
-     * @param pathName The path within at root of the persister
-     * @return The namespaced path for {@code pathName}
+     * @return {@code Services/[namespace]/Configurations}, or {@code Configurations}
      */
-    private static String getRootPath(String namespace, String pathName) {
-        return namespace.isEmpty() ? pathName :
-            PersisterUtils.join(NAMESPACE_ROOT_NAME, PersisterUtils.join(namespace, pathName));
+    private static String getConfigsPath(String namespace) {
+        return PersisterUtils.getServiceNamespacedRootPath(namespace, CONFIGURATIONS_PATH_NAME);
     }
 }

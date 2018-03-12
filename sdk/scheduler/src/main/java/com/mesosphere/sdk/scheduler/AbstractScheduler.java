@@ -26,7 +26,7 @@ public abstract class AbstractScheduler implements MesosEventClient {
 
     private final Logger logger;
 
-    private final String serviceName;
+    protected final ServiceSpec serviceSpec;
     protected final StateStore stateStore;
 
     private final AtomicBoolean started = new AtomicBoolean(false);
@@ -39,19 +39,21 @@ public abstract class AbstractScheduler implements MesosEventClient {
     /**
      * Creates a new AbstractScheduler given a {@link StateStore}.
      */
-    protected AbstractScheduler(String serviceName, StateStore stateStore, Optional<PlanCustomizer> planCustomizer) {
-        this.logger = LoggingUtils.getLogger(AbstractScheduler.class, serviceName);
-        this.serviceName = serviceName;
+    protected AbstractScheduler(
+            ServiceSpec serviceSpec,
+            StateStore stateStore,
+            Optional<PlanCustomizer> planCustomizer) {
+        this.logger = LoggingUtils.getLogger(AbstractScheduler.class, serviceSpec.getName());
+        this.serviceSpec = serviceSpec;
         this.stateStore = stateStore;
         this.planCustomizer = planCustomizer;
     }
 
     /**
-     * Returns the service name for this service. If this is the only service in this framework, it's equivalent to the
-     * framework name.
+     * Returns the service spec for this service.
      */
-    public String getName() {
-        return serviceName;
+    public ServiceSpec getServiceSpec() {
+        return serviceSpec;
     }
 
     /**
@@ -95,8 +97,8 @@ public abstract class AbstractScheduler implements MesosEventClient {
     @Override
     public void registered(boolean reRegistered) {
         if (!reRegistered) {
-            this.reviveManager = new ReviveManager(serviceName);
-            this.reconciler = new Reconciler(serviceName, stateStore);
+            this.reviveManager = new ReviveManager(serviceSpec.getName());
+            this.reconciler = new Reconciler(serviceSpec.getName(), stateStore);
             registeredWithMesos();
         }
         // Explicit task reconciliation should be (re)started on all (re-)registrations.

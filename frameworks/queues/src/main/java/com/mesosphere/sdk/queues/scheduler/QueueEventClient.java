@@ -23,9 +23,10 @@ import com.mesosphere.sdk.offer.OfferRecommendation;
 import com.mesosphere.sdk.offer.OfferUtils;
 import com.mesosphere.sdk.offer.ResourceUtils;
 import com.mesosphere.sdk.offer.TaskException;
-import com.mesosphere.sdk.queues.generator.RunGenerator;
+import com.mesosphere.sdk.queues.generator.Generator;
 import com.mesosphere.sdk.queues.http.endpoints.*;
 import com.mesosphere.sdk.queues.http.types.RunInfoProvider;
+import com.mesosphere.sdk.queues.state.SpecStore;
 import com.mesosphere.sdk.scheduler.MesosEventClient;
 import com.mesosphere.sdk.scheduler.OfferResources;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
@@ -57,21 +58,25 @@ public class QueueEventClient implements MesosEventClient {
 
     private static final Logger LOGGER = LoggingUtils.getLogger(QueueEventClient.class);
 
-
+    private final SpecStore specStore;
     private final DefaultRunManager runManager;
-    private final Map<String, RunGenerator> runGenerators;
+    private final Map<String, Generator> runGenerators;
+    private final Optional<String> defaultSpecType;
     private final UninstallCallback uninstallCallback;
-
     private final DeregisterStep deregisterStep;
     private final Optional<Plan> uninstallPlan;
 
     public QueueEventClient(
             SchedulerConfig schedulerConfig,
+            SpecStore specStore,
             DefaultRunManager runManager,
-            Map<String, RunGenerator> runGenerators,
+            Map<String, Generator> runGenerators,
+            Optional<String> defaultSpecType,
             UninstallCallback uninstallCallback) {
+        this.specStore = specStore;
         this.runManager = runManager;
         this.runGenerators = runGenerators;
+        this.defaultSpecType = defaultSpecType;
         this.uninstallCallback = uninstallCallback;
 
         if (schedulerConfig.isUninstallEnabled()) {
@@ -139,6 +144,7 @@ public class QueueEventClient implements MesosEventClient {
                 noClients = true;
             }
             for (AbstractScheduler run : runs) {
+                String runServiceName = run.getServiceSpec().getName();
                 OfferResponse response = run.offers(remainingOffers);
                 if (!remainingOffers.isEmpty() && !response.recommendations.isEmpty()) {
                     // Some offers were consumed. Update what remains to offer to the next run.
@@ -148,7 +154,7 @@ public class QueueEventClient implements MesosEventClient {
                 }
                 recommendations.addAll(response.recommendations);
                 LOGGER.info("  {} offer result: {}[{} rec{}], {} offer{} remaining",
-                        run.getName(),
+                        runServiceName,
                         response.result,
                         response.recommendations.size(), response.recommendations.size() == 1 ? "" : "s",
                         remainingOffers.size(), remainingOffers.size() == 1 ? "" : "s");
@@ -156,11 +162,11 @@ public class QueueEventClient implements MesosEventClient {
                 switch (response.result) {
                 case FINISHED:
                     // This client has completed running and can be switched to uninstall.
-                    finishedRuns.add(run.getName());
+                    finishedRuns.add(runServiceName);
                     break;
                 case UNINSTALLED:
                     // This client has completed uninstall and can be removed.
-                    uninstalledRuns.add(run.getName());
+                    uninstalledRuns.add(runServiceName);
                     break;
                 case NOT_READY:
                     // This client wasn't ready. Tell upstream to short-decline any remaining offers so that it can get
@@ -276,8 +282,8 @@ public class QueueEventClient implements MesosEventClient {
             String serviceName = entry.getKey();
             Collection<OfferResources> serviceOffers = entry.getValue().values();
 
-            AbstractScheduler run = runManager.getRun(serviceName);
-            if (run == null) {
+            Optional<AbstractScheduler> run = runManager.getRun(serviceName);
+            if (!run.isPresent()) {
                 // (CASE 2) Old or invalid service name. Consider all resources for this service as unexpected.
                 LOGGER.info("  {} cleanup result: unknown service, all resources unexpected", serviceName);
                 for (OfferResources serviceOffer : serviceOffers) {
@@ -296,7 +302,7 @@ public class QueueEventClient implements MesosEventClient {
                 // (CASE 3) The service has returned the subset of these resources which are unexpected.
                 // Add those to unexpectedResources.
                 // Note: We're careful to only invoke this once per service, as the call is likely to be expensive.
-                UnexpectedResourcesResponse response = run.getUnexpectedResources(offersToSend);
+                UnexpectedResourcesResponse response = run.get().getUnexpectedResources(offersToSend);
                 LOGGER.info("  {} cleanup result: {} with {} unexpected resources in {} offer{}",
                         serviceName,
                         response.result,
@@ -353,8 +359,8 @@ public class QueueEventClient implements MesosEventClient {
             return StatusResponse.unknownTask();
         }
 
-        AbstractScheduler run = runManager.getRun(serviceName.get());
-        if (run == null) {
+        Optional<AbstractScheduler> run = runManager.getRun(serviceName.get());
+        if (!run.isPresent()) {
             // Unrecognized service. Status for old task?
             LOGGER.info("Received task status for unknown service {}: {}",
                     serviceName.get(), TextFormat.shortDebugString(status));
@@ -362,7 +368,7 @@ public class QueueEventClient implements MesosEventClient {
         } else {
             LOGGER.info("Received task status for service {}: {}={}",
                     serviceName.get(), status.getTaskId().getValue(), status.getState());
-            return run.status(status);
+            return run.get().status(status);
         }
     }
 
@@ -379,7 +385,7 @@ public class QueueEventClient implements MesosEventClient {
         return Arrays.asList(
                 new HealthResource(planManagers),
                 new PlansResource(planManagers),
-                new QueueResource(runManager, runGenerators),
+                new QueueResource(specStore, runManager, runGenerators, defaultSpecType),
                 new RunArtifactResource(runInfoProvider),
                 new RunConfigResource(runInfoProvider),
                 new RunPlansResource(runInfoProvider),

@@ -13,9 +13,9 @@ import com.mesosphere.sdk.specification.yaml.RawServiceSpec;
 import com.mesosphere.sdk.storage.Persister;
 
 /**
- * Default implementation of {@link RunGenerator} with support for run types in the default queue service.
+ * Default implementation of {@link Generator} with support for run types in the default queue service.
  */
-public class SDKYamlGenerator implements RunGenerator {
+public class SDKYamlGenerator implements Generator {
 
     // 64k ought to be good enough for anybody.
     private static final int PAYLOAD_SIZE_LIMIT = 65536;

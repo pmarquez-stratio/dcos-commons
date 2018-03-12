@@ -16,9 +16,11 @@ import com.mesosphere.sdk.offer.CommonIdUtils;
 import com.mesosphere.sdk.offer.Constants;
 import com.mesosphere.sdk.offer.OfferRecommendation;
 import com.mesosphere.sdk.offer.ReserveOfferRecommendation;
+import com.mesosphere.sdk.queues.state.SpecStore;
 import com.mesosphere.sdk.scheduler.MesosEventClient.OfferResponse;
 import com.mesosphere.sdk.scheduler.MesosEventClient.StatusResponse;
 import com.mesosphere.sdk.scheduler.SchedulerConfig;
+import com.mesosphere.sdk.specification.ServiceSpec;
 
 import static org.mockito.Mockito.*;
 
@@ -27,6 +29,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 public class QueueEventClientTest {
@@ -78,7 +81,17 @@ public class QueueEventClientTest {
     @Mock private DefaultScheduler mockClient7;
     @Mock private DefaultScheduler mockClient8;
     @Mock private DefaultScheduler mockClient9;
+    @Mock private ServiceSpec mockServiceSpec1;
+    @Mock private ServiceSpec mockServiceSpec2;
+    @Mock private ServiceSpec mockServiceSpec3;
+    @Mock private ServiceSpec mockServiceSpec4;
+    @Mock private ServiceSpec mockServiceSpec5;
+    @Mock private ServiceSpec mockServiceSpec6;
+    @Mock private ServiceSpec mockServiceSpec7;
+    @Mock private ServiceSpec mockServiceSpec8;
+    @Mock private ServiceSpec mockServiceSpec9;
     @Mock private SchedulerConfig mockSchedulerConfig;
+    @Mock private SpecStore mockSpecStore;
     @Mock private DefaultRunManager mockRunManager;
     @Mock private QueueEventClient.UninstallCallback mockUninstallCallback;
 
@@ -88,25 +101,33 @@ public class QueueEventClientTest {
     @Before
     public void beforeEach() {
         MockitoAnnotations.initMocks(this);
-        when(mockClient1.getName()).thenReturn("1");
-        when(mockClient2.getName()).thenReturn("2");
-        when(mockClient3.getName()).thenReturn("3");
-        when(mockClient4.getName()).thenReturn("4");
-        when(mockClient5.getName()).thenReturn("5");
-        when(mockClient6.getName()).thenReturn("6");
-        when(mockClient7.getName()).thenReturn("7");
-        when(mockClient8.getName()).thenReturn("8");
-        when(mockClient9.getName()).thenReturn("9");
-        client = new QueueEventClient(
-                mockSchedulerConfig, mockRunManager, Collections.emptyMap(), mockUninstallCallback);
+        when(mockClient1.getServiceSpec()).thenReturn(mockServiceSpec1);
+        when(mockClient2.getServiceSpec()).thenReturn(mockServiceSpec2);
+        when(mockClient3.getServiceSpec()).thenReturn(mockServiceSpec3);
+        when(mockClient4.getServiceSpec()).thenReturn(mockServiceSpec4);
+        when(mockClient5.getServiceSpec()).thenReturn(mockServiceSpec5);
+        when(mockClient6.getServiceSpec()).thenReturn(mockServiceSpec6);
+        when(mockClient7.getServiceSpec()).thenReturn(mockServiceSpec7);
+        when(mockClient8.getServiceSpec()).thenReturn(mockServiceSpec8);
+        when(mockClient9.getServiceSpec()).thenReturn(mockServiceSpec9);
+        when(mockServiceSpec1.getName()).thenReturn("1");
+        when(mockServiceSpec2.getName()).thenReturn("2");
+        when(mockServiceSpec3.getName()).thenReturn("3");
+        when(mockServiceSpec4.getName()).thenReturn("4");
+        when(mockServiceSpec5.getName()).thenReturn("5");
+        when(mockServiceSpec6.getName()).thenReturn("6");
+        when(mockServiceSpec7.getName()).thenReturn("7");
+        when(mockServiceSpec8.getName()).thenReturn("8");
+        when(mockServiceSpec9.getName()).thenReturn("9");
+        client = buildClient();
     }
 
     @Test
     public void offerNoClientsUninstalling() {
         // Tell client that it's doing an uninstall:
         when(mockSchedulerConfig.isUninstallEnabled()).thenReturn(true);
-        client = new QueueEventClient(
-                mockSchedulerConfig, mockRunManager, Collections.emptyMap(), mockUninstallCallback);
+        // Rebuild client because uninstall bit is checked in constructor:
+        client = buildClient();
 
         // No offers
         OfferResponse response = client.offers(Collections.emptyList());
@@ -159,8 +180,8 @@ public class QueueEventClientTest {
     @Test
     public void clientRemovalDuringUninstall() {
         when(mockSchedulerConfig.isUninstallEnabled()).thenReturn(true);
-        client = new QueueEventClient(
-                mockSchedulerConfig, mockRunManager, Collections.emptyMap(), mockUninstallCallback);
+        // Rebuild client because uninstall bit is checked in constructor:
+        client = buildClient();
 
         when(mockRunManager.lockAndGetRuns()).thenReturn(Collections.singleton(mockClient1));
 
@@ -303,7 +324,7 @@ public class QueueEventClientTest {
 
     @Test
     public void statusClientNotFound() {
-        when(mockRunManager.getRun("2")).thenReturn(null);
+        when(mockRunManager.getRun("2")).thenReturn(Optional.empty());
 
         Protos.TaskStatus status = buildStatus("2");
         Assert.assertEquals(StatusResponse.Result.UNKNOWN_TASK, client.status(status).result);
@@ -314,7 +335,7 @@ public class QueueEventClientTest {
     public void statusUnknown() {
         // Client 2: unknown task
         when(mockClient2.status(any())).thenReturn(StatusResponse.unknownTask());
-        when(mockRunManager.getRun("2")).thenReturn(mockClient2);
+        when(mockRunManager.getRun("2")).thenReturn(Optional.of(mockClient2));
 
         Protos.TaskStatus status = buildStatus("2");
         Assert.assertEquals(StatusResponse.Result.UNKNOWN_TASK, client.status(status).result);
@@ -325,11 +346,21 @@ public class QueueEventClientTest {
     public void statusProcessed() {
         // Client 3: status processed
         when(mockClient3.status(any())).thenReturn(StatusResponse.processed());
-        when(mockRunManager.getRun("3")).thenReturn(mockClient3);
+        when(mockRunManager.getRun("3")).thenReturn(Optional.of(mockClient3));
 
         Protos.TaskStatus status = buildStatus("3");
         Assert.assertEquals(StatusResponse.Result.PROCESSED, client.status(status).result);
         verify(mockClient3, times(1)).status(status);
+    }
+
+    private QueueEventClient buildClient() {
+        return new QueueEventClient(
+                mockSchedulerConfig,
+                mockSpecStore,
+                mockRunManager,
+                Collections.emptyMap(),
+                Optional.empty(),
+                mockUninstallCallback);
     }
 
     @SuppressWarnings("deprecation")
